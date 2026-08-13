@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZHunter PRO</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* ── Sidepanel layout overrides — fill panel width dynamically ── */
+    html, body {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+      min-height: 100vh !important;
+      max-height: 100vh !important;
+      overflow-x: hidden !important;
+      overflow-y: auto !important;
+    }
+  </style>
+</head>
+<body>
+  <!-- ═════════════════ HEADER ═════════════════ -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="brand-logo-wrap">
+        <div class="brand-logo-glow"></div>
+        <img src="icon48.png" alt="ZHunter" class="brand-logo-img" onerror="this.style.display='none'" />
+      </div>
+      <div class="brand-text">
+        <div class="brand-name-row">
+          <span class="brand-name">ZHunter</span>
+          <span class="brand-pro">PRO</span>
+        </div>
+        <div class="brand-version" data-version>v7.6.1</div>
+        <div class="brand-sub">Ultimate Product Hunter</div>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="stat-pill" title="Saved products">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+          <polyline points="2 17 12 22 22 17"/>
+          <polyline points="2 12 12 17 22 12"/>
+        </svg>
+        <span id="totalCount">0</span>
+      </div>
+
+      <button id="cloudSyncBtn" class="hdr-btn cloud-sync-btn" title="Cloud Sync — Click to sync now" aria-label="Cloud Sync" style="position:relative">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        <span id="cloudSyncDot" style="position:absolute;top:2px;right:2px;width:7px;height:7px;border-radius:50%;background:#6b7280;border:1.5px solid var(--bg-primary,#0f172a)"></span>
+      </button>
+
+      <button id="themeToggleBtn" class="hdr-btn" title="Switch to Light Mode" aria-label="Toggle theme">
+        <div class="theme-icon-wrap">
+          <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+          </svg>
+          <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </div>
+      </button>
+
+      <button id="settingsBtn" class="hdr-btn" title="Open Settings" aria-label="Settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.67 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.67 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ═════════════════ TABS ═════════════════ -->
+  <nav class="tab-nav" role="tablist" aria-label="Main tabs">
+    <button class="tab-btn active" data-tab="images" role="tab" aria-selected="true" id="tab-btn-images">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <polyline points="21 15 16 10 5 21"/>
+      </svg>
+      Images
+    </button>
+
+    <button class="tab-btn" data-tab="bulk" role="tab" aria-selected="false" id="tab-btn-bulk">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="7" rx="1"/>
+        <rect x="14" y="3" width="7" height="7" rx="1"/>
+        <rect x="3" y="14" width="7" height="7" rx="1"/>
+        <rect x="14" y="14" width="7" height="7" rx="1"/>
+      </svg>
+      Bulk
+    </button>
+
+    <button class="tab-btn" data-tab="videos" role="tab" aria-selected="false" id="tab-btn-videos">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <polygon points="5 3 19 12 5 21 5 3"/>
+      </svg>
+      Videos
+    </button>
+  </nav>
+
+
+  <!-- ═════════════════ TAB: IMAGES ═════════════════ -->
+  <section id="tab-images" class="tab-panel active" role="tabpanel" aria-labelledby="tab-btn-images">
+    <!-- Top toolbar -->
+    <div class="img-tab-toolbar">
+      <div class="img-tab-toolbar-left">
+        <button id="imgSelectAllBtn" class="btn btn-ghost-sm" type="button">Select All</button>
+        <button id="imgDeselectAllBtn" class="btn btn-ghost-sm" type="button">Deselect All</button>
+      </div>
+      <div class="img-tab-toolbar-right">
+        <span id="imgFoundCount" class="img-found-count">0 images</span>
+        <button id="imgRefreshBtn" class="btn btn-ghost-sm" type="button" title="Re-scan page">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M3 12a9 9 0 0 1 14.85-6.85L21 8"/>
+            <path d="M3 4v4h4"/>
+            <path d="M21 12a9 9 0 0 1-14.85 6.85L3 16"/>
+            <path d="M21 20v-4h-4"/>
+          </svg>
+          Refresh
+        </button>
+      </div>
+    </div>
+
+    <!-- Hunt Images button -->
+    <div class="img-hunt-zone">
+      <div class="img-hunt-zone-border">
+        <button id="imgHuntBtn" class="btn-img-hunt" type="button">
+          <span class="img-hunt-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+          </span>
+          <span class="img-hunt-content">
+            <span class="img-hunt-title">🎯 Hunt Images</span>
+            <span class="img-hunt-sub">Extract all product images from this page</span>
+          </span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Image grid -->
+    <div id="imgGrid" class="img-tab-grid-wrap">
+      <div class="img-tab-empty" id="imgEmptyState">
+        <div class="img-tab-empty-ico">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+        </div>
+        <div class="img-tab-empty-title">No product images found</div>
+        <div class="img-tab-empty-sub">Navigate to a product page on Amazon, Walmart, or Sam's Club, then click Refresh.</div>
+      </div>
+    </div>
+
+    <!-- Scanning overlay -->
+    <div id="imgScanningState" class="img-tab-scanning hidden">
+      <div class="img-scan-spinner"></div>
+      <span>Scanning page for images…</span>
+    </div>
+
+    <!-- Bottom download bar -->
+    <div class="img-tab-footer">
+      <div class="img-tab-footer-row">
+        <label class="form-label" style="margin:0;white-space:nowrap">Format</label>
+        <select id="imgFormatSel" class="sel img-format-sel">
+          <option value="original">Original (Best Quality)</option>
+          <option value="png">PNG</option>
+          <option value="jpg" selected>JPG</option>
+        </select>
+        <button id="imgDownloadBtn" class="btn btn-theme" type="button" style="flex:1;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Download Selected
+        </button>
+      </div>
+      <div id="imgStatusBar" class="img-status-bar"></div>
+    </div>
+  </section>
+
+  <!-- ═════════════════ TAB: VIDEOS ═════════════════ -->
+  <section id="tab-videos" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-videos">
+
+    <!-- Toolbar -->
+    <div class="img-tab-toolbar">
+      <div class="img-tab-toolbar-left">
+        <span id="vidFoundCount" class="img-found-count">0 videos</span>
+      </div>
+      <div class="img-tab-toolbar-right">
+        <button id="vidRefreshBtn" class="btn btn-ghost-sm" type="button" title="Re-scan page">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M3 12a9 9 0 0 1 14.85-6.85L21 8"/>
+            <path d="M3 4v4h4"/>
+            <path d="M21 12a9 9 0 0 1-14.85 6.85L3 16"/>
+            <path d="M21 20v-4h-4"/>
+          </svg>
+          Refresh
+        </button>
+      </div>
+    </div>
+
+    <!-- Hunt Videos button -->
+    <div class="img-hunt-zone">
+      <div class="img-hunt-zone-border">
+        <button id="vidHuntBtn" class="btn-img-hunt" type="button">
+          <span class="img-hunt-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+          </span>
+          <span class="img-hunt-content">
+            <span class="img-hunt-title">🎬 Hunt Videos</span>
+            <span class="img-hunt-sub">Find MP4, HLS and YouTube videos on this page</span>
+          </span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Video card list -->
+    <div id="vidGrid" class="vid-tab-grid-wrap">
+      <div class="img-tab-empty" id="vidEmptyState">
+        <div class="img-tab-empty-ico">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+        </div>
+        <div class="img-tab-empty-title">No videos found</div>
+        <div class="img-tab-empty-sub">Navigate to a product page with videos, then click Hunt Videos.</div>
+      </div>
+    </div>
+
+    <!-- Scanning overlay -->
+    <div id="vidScanningState" class="img-tab-scanning hidden">
+      <div class="img-scan-spinner"></div>
+      <span>Scanning page for videos…</span>
+    </div>
+
+    <!-- Footer -->
+    <div class="img-tab-footer">
+      <div class="img-tab-footer-row">
+        <button id="vidCopyAllBtn" class="btn btn-ghost" type="button" style="flex:1;font-size:11px">
+          📋 Copy All URLs
+        </button>
+        <button id="vidDownloadZipBtn" class="btn btn-theme" type="button" style="flex:1;font-size:11px">
+          🗂 Download All
+        </button>
+      </div>
+      <div id="vidStatusBar" class="img-status-bar"></div>
+    </div>
+  </section>
+
+
+  <!-- ═════════════════ TAB: BULK ═════════════════ -->
+  <section id="tab-bulk" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-bulk">
+    <div class="bulk-scroll">
+
+      <!-- Bulk Hunt Header -->
+      <div class="bulk-header">
+        <div class="bulk-header-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/>
+            <rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+        </div>
+        <div>
+          <div class="bulk-title">Bulk Hunt</div>
+          <div class="bulk-subtitle">Hunt multiple tabs at once → sheet + images</div>
+        </div>
+      </div>
+
+      <!-- View switcher: Tabs view / Master Sheet view -->
+      <div class="bulk-toggle-row">
+        <button id="bulkViewTabsBtn"   class="bulk-toggle active" type="button">📋 Open Tabs</button>
+        <button id="bulkViewMasterBtn" class="bulk-toggle"        type="button">📚 Master Sheet</button>
+      </div>
+
+      <!-- ── VIEW 1: Tab list + selection ── -->
+      <div id="bulkTabsView" class="bulk-view active">
+
+        <div class="bulk-actions-row">
+          <button id="bulkRefreshTabsBtn" class="btn btn-ghost-sm" type="button" title="Refresh tab list">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 0 1 14.85-6.85L21 8"/><path d="M3 4v4h4"/><path d="M21 12a9 9 0 0 1-14.85 6.85L3 16"/><path d="M21 20v-4h-4"/></svg>
+            Refresh
+          </button>
+          <button id="bulkSelectAllBtn"   class="btn btn-ghost-sm" type="button">Select Products</button>
+          <button id="bulkDeselectAllBtn" class="btn btn-ghost-sm" type="button">None</button>
+          <button id="bulkColumnsToggleBtn" class="btn btn-ghost-sm" type="button" title="Customize sheet columns" style="margin-left:auto">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Columns
+          </button>
+        </div>
+
+        <!-- Inline columns panel (toggles open via Columns button) -->
+        <div id="bulkColumnsPanel" class="bulk-columns-panel hidden">
+          <div class="bulk-columns-head">
+            <strong>Sheet columns</strong>
+            <span class="bulk-columns-sub">Choose which columns to include in XLSX/CSV/HTML</span>
+          </div>
+          <div id="bulkColumnsGrid" class="bulk-columns-grid"></div>
+        </div>
+
+        <div id="bulkTabsList" class="bulk-tabs-list">
+          <div class="bulk-empty">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            <p>Loading tabs…</p>
+          </div>
+        </div>
+
+        <div class="bulk-summary" id="bulkSummary">
+          <span id="bulkSelectedCount">0 selected</span>
+          <span id="bulkTimeEstimate"></span>
+        </div>
+
+        <div class="hunt-zone-border">
+          <!-- Resume banner (hidden by default, shown if a pending hunt is found) -->
+          <div id="bulkResumeBar" class="bulk-resume-bar hidden">
+            <span id="bulkResumeMsg">⚡ Unfinished hunt found</span>
+            <div class="bulk-resume-actions">
+              <button id="bulkResumeBtn" class="btn btn-theme" type="button" style="font-size:11px;padding:4px 10px">Resume</button>
+              <button id="bulkDiscardBtn" class="btn btn-ghost" type="button" style="font-size:11px;padding:4px 10px">Discard</button>
+            </div>
+          </div>
+          <button id="bulkHuntStartBtn" class="btn-bulk-main" type="button" disabled>
+            <span class="bulk-main-icon">⚡</span>
+            <span class="bulk-main-text">Hunt Selected Tabs</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ── VIEW 2: Master Sheet ── -->
+      <div id="bulkMasterView" class="bulk-view">
+        <div class="master-stats">
+          <div class="master-stat">
+            <div class="master-stat-num" id="masterRowCount">0</div>
+            <div class="master-stat-lbl">Products tracked</div>
+          </div>
+          <div class="master-stat">
+            <div class="master-stat-num" id="masterBatchCount">0</div>
+            <div class="master-stat-lbl">Hunt sessions</div>
+          </div>
+          <div class="master-stat">
+            <div class="master-stat-num" id="masterStartDate">—</div>
+            <div class="master-stat-lbl">Started</div>
+          </div>
+        </div>
+
+        <div class="master-warning hidden" id="masterWarning">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <div>
+            <strong>Master sheet is large</strong>
+            <p>Over 200 rows. Consider downloading and resetting for performance.</p>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Download Master Sheet</label>
+          <div class="master-dl-row">
+            <button id="masterDlXlsxBtn" class="btn btn-ghost" type="button" disabled>📊 XLSX</button>
+            <button id="masterDlHtmlBtn" class="btn btn-ghost" type="button" disabled>🌐 HTML</button>
+            <button id="masterDlPdfBtn"  class="btn btn-ghost" type="button" disabled>📄 PDF</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div class="master-list-head">
+            <label class="form-label" style="margin:0">Saved products</label>
+            <div class="master-quick-actions">
+              <button id="masterSelectAllBtn"     class="btn btn-ghost-sm" type="button">All</button>
+              <button id="masterSelectFailedBtn"  class="btn btn-ghost-sm" type="button">Failed</button>
+              <button id="masterSelectPartialBtn" class="btn btn-ghost-sm" type="button">Partial</button>
+              <button id="masterDeselectAllBtn"   class="btn btn-ghost-sm" type="button">None</button>
+            </div>
+          </div>
+          <div id="masterRowsList" class="master-rows-list">
+            <div class="bulk-empty"><p>No products yet. Hunt some tabs first!</p></div>
+          </div>
+        </div>
+
+        <div class="master-bulk-bar hidden" id="masterBulkBar">
+          <span id="masterBulkSelCount">0 selected</span>
+          <div class="master-bulk-actions">
+            <button id="masterBulkDeleteBtn" class="btn btn-ghost btn-danger btn-sm" type="button">Delete</button>
+            <button id="masterBulkCancelBtn" class="btn btn-ghost btn-sm" type="button">Cancel</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Recent batches</label>
+          <div id="masterBatchList" class="master-batch-list">
+            <div class="bulk-empty"><p>No batches yet. Hunt some tabs first!</p></div>
+          </div>
+        </div>
+
+        <button id="masterResetBtn" class="btn btn-ghost btn-danger" type="button">
+          ⚠ Reset Master Sheet
+        </button>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═════════════════ MODALS ═════════════════ -->
+  <!-- Edit Modal -->
+  <div id="editModal" class="modal-back hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>Edit Product</h3>
+        <button id="closeEditModal" class="modal-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <input id="editLinkId" type="hidden" />
+        <div class="form-group">
+          <label class="form-label">URL</label>
+          <input id="editUrl" type="text" class="inp" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Title</label>
+          <input id="editTitle" type="text" class="inp" />
+        </div>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Price</label>
+            <input id="editPrice" type="text" class="inp inp-price" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Folder</label>
+            <select id="editFolder" class="sel"></select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Category</label>
+          <input id="editCategory" type="text" class="inp" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Notes / Description</label>
+          <textarea id="editNotes" class="inp inp-ta"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Video URL <span class="lbl-opt">(YouTube, direct MP4, etc.)</span></label>
+          <input id="editVideoUrl" type="text" class="inp" placeholder="https://youtube.com/watch?v=… or direct video URL" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tags</label>
+          <div id="editTagsSelector" class="tags-pick"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Images <span class="lbl-opt">(max 15)</span></label>
+          <div id="editImagesGrid" class="images-grid edit-imgs-grid"></div>
+          <div class="img-actions-row">
+            <button id="editAddImageBtn" class="btn btn-ghost-sm" type="button">+ Add Image</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button id="cancelEditBtn" class="btn btn-ghost" type="button">Cancel</button>
+        <button id="saveEditBtn" class="btn btn-theme" type="button">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Modal -->
+  <div id="confirmModal" class="modal-back hidden">
+    <div class="modal-box modal-sm">
+      <div class="modal-head">
+        <h3 id="confirmTitle">Confirm</h3>
+        <button id="confirmCancel" class="modal-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirmMessage" class="confirm-msg">Are you sure?</p>
+      </div>
+      <div class="modal-foot">
+        <button id="confirmOk" class="btn btn-theme" type="button">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Image URL Modal -->
+  <div id="imageUrlModal" class="modal-back hidden">
+    <div class="modal-box modal-sm">
+      <div class="modal-head">
+        <h3>Add Image from URL</h3>
+        <button id="closeImageUrlModal" class="modal-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <input id="imageUrlInput" type="text" class="inp" placeholder="https://example.com/image.jpg" autocomplete="off" />
+      </div>
+      <div class="modal-foot">
+        <button id="cancelImageUrl" class="btn btn-ghost" type="button">Cancel</button>
+        <button id="confirmImageUrl" class="btn btn-theme" type="button">Add Image</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════════ HUNT PREVIEW MODAL ═════════════════ -->
+  <div id="huntPreviewModal" class="modal-back hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>🛍️ Review Before Saving</h3>
+        <button id="closeHuntModal" class="modal-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <div class="hunt-img-bar">
+            <label class="form-label" style="margin:0">
+              Images <span id="huntImgCounter" class="lbl-opt">0/0 selected</span>
+            </label>
+            <div class="hunt-img-bar-actions">
+              <button id="huntSelectAllBtn" class="btn btn-ghost-sm" type="button">Select All</button>
+              <button id="huntDeselectAllBtn" class="btn btn-ghost-sm" type="button">None</button>
+            </div>
+          </div>
+          <div id="huntImagesGrid" class="hunt-imgs-grid"></div>
+          <p class="lbl-opt" style="margin-top:6px;font-size:11px">Click any image to skip it. Skipped images won't be saved.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">URL</label>
+          <input id="huntUrl" type="text" class="inp" readonly />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Title</label>
+          <input id="huntTitle" type="text" class="inp" />
+        </div>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Price</label>
+            <input id="huntPrice" type="text" class="inp inp-price" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Folder</label>
+            <select id="huntFolder" class="sel"></select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Category</label>
+          <input id="huntCategory" type="text" class="inp" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">WEIGHT</label>
+          <div class="review-field">
+            <input type="text" id="modalWeight" class="inp" placeholder="e.g. 2.5 lb" readonly />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">PACKAGE DIMENSIONS (inches)</label>
+          <div style="display:flex;gap:8px;">
+            <div style="flex:1;text-align:center;">
+              <div style="font-size:11px;color:#00cfff;font-weight:bold;margin-bottom:4px;">L</div>
+              <input type="text" id="modalLength" class="inp modal-dim-inp" placeholder="0.0" readonly />
+            </div>
+            <div style="flex:1;text-align:center;">
+              <div style="font-size:11px;color:#00cfff;font-weight:bold;margin-bottom:4px;">W</div>
+              <input type="text" id="modalWidth" class="inp modal-dim-inp" placeholder="0.0" readonly />
+            </div>
+            <div style="flex:1;text-align:center;">
+              <div style="font-size:11px;color:#00cfff;font-weight:bold;margin-bottom:4px;">H</div>
+              <input type="text" id="modalHeight" class="inp modal-dim-inp" placeholder="0.0" readonly />
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Notes / Description</label>
+          <div class="hunt-notes-wrap" style="position:relative;">
+            <textarea id="huntNotes" class="inp inp-ta" placeholder="Product description, AI summary, etc."></textarea>
+            <button id="modalAiBtn" class="ai-gen-btn" type="button">✨ AI</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button id="cancelHuntBtn" class="btn btn-ghost" type="button">Cancel</button>
+        <button id="confirmHuntSaveBtn" class="btn btn-theme" type="button">💾 Save Product</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════════ BULK HUNT PROGRESS MODAL ═════════════════ -->
+  <div id="bulkProgressModal" class="modal-back hidden">
+    <div class="modal-box bulk-progress-box">
+      <div class="modal-head">
+        <h3 id="bulkProgressTitle">⚡ Hunting in Progress</h3>
+        <button id="bulkProgressCloseBtn" class="modal-close hidden" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Progress bar -->
+        <div class="bulk-prog-bar-wrap">
+          <div class="bulk-prog-bar"><div class="bulk-prog-fill" id="bulkProgFill"></div></div>
+          <div class="bulk-prog-text" id="bulkProgText">0 of 0 done</div>
+        </div>
+
+        <!-- Live stats bar -->
+        <div class="bulk-prog-stats" id="bulkProgStats">
+          <span class="bps-item" id="bpsSpeed">⚡ — tabs/s</span>
+          <span class="bps-sep">·</span>
+          <span class="bps-item" id="bpsImages">📸 0 imgs</span>
+          <span class="bps-sep">·</span>
+          <span class="bps-item" id="bpsVideos">🎬 0 vids</span>
+          <span class="bps-sep">·</span>
+          <span class="bps-item" id="bpsEta">⏱ calculating…</span>
+        </div>
+
+        <!-- Live tab list with status -->
+        <div id="bulkProgList" class="bulk-prog-list"></div>
+
+        <!-- Result summary (hidden during run) -->
+        <div id="bulkResultSummary" class="bulk-result-summary hidden">
+          <div class="bulk-result-stats">
+            <div class="bulk-rs-item ok">
+              <div class="bulk-rs-num" id="bulkRsOk">0</div>
+              <div class="bulk-rs-lbl">Successful</div>
+            </div>
+            <div class="bulk-rs-item partial">
+              <div class="bulk-rs-num" id="bulkRsPartial">0</div>
+              <div class="bulk-rs-lbl">Partial</div>
+            </div>
+            <div class="bulk-rs-item fail">
+              <div class="bulk-rs-num" id="bulkRsFail">0</div>
+              <div class="bulk-rs-lbl">Failed</div>
+            </div>
+          </div>
+          <div class="bulk-result-meta" id="bulkResultMeta"></div>
+          <!-- Failed tabs detail (hidden if none) -->
+          <div id="bulkFailedDetail" class="bulk-failed-detail hidden">
+            <button class="bulk-failed-toggle" id="bulkFailedToggle" type="button">▶ Show failed tabs</button>
+            <div id="bulkFailedList" class="bulk-failed-list hidden"></div>
+          </div>
+
+          <div class="bulk-result-actions">
+            <div class="bulk-dl-grid">
+              <button id="bulkDlXlsxBtn" class="bulk-dl-btn" type="button">
+                <span class="bulk-dl-icon">📊</span>
+                <span class="bulk-dl-text">Sheet (XLSX)</span>
+              </button>
+
+              <button id="bulkDlZipBtn" class="bulk-dl-btn primary" type="button">
+                <span class="bulk-dl-icon">🗜</span>
+                <span class="bulk-dl-text">Master ZIP</span>
+                <span class="bulk-dl-sub">sheets + images</span>
+              </button>
+              <button id="bulkDlSeqBtn" class="bulk-dl-btn" type="button">
+                <span class="bulk-dl-icon">⬇</span>
+                <span class="bulk-dl-text">Sequential</span>
+                <span class="bulk-dl-sub">images only</span>
+              </button>
+              <button id="bulkDlPdfBtn" class="bulk-dl-btn" type="button">
+                <span class="bulk-dl-icon">📄</span>
+                <span class="bulk-dl-text">PDF Catalog</span>
+              </button>
+            </div>
+            <button id="bulkZipBtn" class="btn btn-secondary" style="width:100%;margin-top:8px">
+              📦 Download Images as ZIP
+            </button>
+            <button id="bulkResultDoneBtn" class="btn btn-ghost" type="button" style="width:100%;margin-top:8px">Done</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-foot" id="bulkProgressFoot">
+        <button id="bulkPauseBtn"  class="btn btn-ghost" type="button">⏸ Pause</button>
+        <button id="bulkCancelBtn" class="btn btn-ghost btn-danger" type="button">✕ Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════════ TOAST ═════════════════ -->
+  <!-- aria-live: screen readers will announce new toast notifications -->
+  <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
+
+  <script src="lib/xlsx-js-style.min.js"></script>
+  <script src="lib/jszip.min.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

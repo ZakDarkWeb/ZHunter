@@ -1,0 +1,153 @@
+/* ── ZHunter PRO Settings — Sticky Sidebar (FIX 3) ─────────── */
+
+body.options-page {
+  display: block !important;
+  justify-content: unset !important;
+  align-items: unset !important;
+}
+
+.opt-sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 200px;
+  height: 100vh;
+  padding: 28px 0;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--bd);
+  z-index: 20;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.opt-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 0 0 0;
+}
+
+.opt-nav-link {
+  display: block;
+  padding: 10px 16px 10px 18px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--tx-2);
+  text-decoration: none;
+  border-left: 3px solid transparent;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.opt-nav-link:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--tx-1);
+}
+
+body.light-mode .opt-nav-link:hover {
+  background: rgba(6, 182, 212, 0.06);
+}
+
+/* Active: cyan left border + cyan text */
+.opt-nav-link.active,
+body:not(:has([id^="section-"]:target)) .opt-nav-link[href="#section-ai"],
+body:has(#section-ai:target) .opt-nav-link[href="#section-ai"],
+body:has(#section-bulk:target) .opt-nav-link[href="#section-bulk"],
+body:has(#section-general:target) .opt-nav-link[href="#section-general"],
+body:has(#section-shortcuts:target) .opt-nav-link[href="#section-shortcuts"],
+body:has(#section-about:target) .opt-nav-link[href="#section-about"],
+body:has(#section-danger:target) .opt-nav-link[href="#section-danger"] {
+  border-left-color: #00cfff;
+  color: #00cfff;
+  background: rgba(0, 207, 255, 0.06);
+}
+
+body.light-mode .opt-nav-link.active,
+body.light-mode:not(:has([id^="section-"]:target)) .opt-nav-link[href="#section-ai"],
+body.light-mode:has(#section-ai:target) .opt-nav-link[href="#section-ai"],
+body.light-mode:has(#section-bulk:target) .opt-nav-link[href="#section-bulk"],
+body.light-mode:has(#section-general:target) .opt-nav-link[href="#section-general"],
+body.light-mode:has(#section-shortcuts:target) .opt-nav-link[href="#section-shortcuts"],
+body.light-mode:has(#section-about:target) .opt-nav-link[href="#section-about"],
+body.light-mode:has(#section-danger:target) .opt-nav-link[href="#section-danger"] {
+  color: #00cfff;
+  background: rgba(0, 207, 255, 0.08);
+}
+
+.opt-main {
+  margin-left: 220px;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+}
+
+body.options-page .opt-wrap {
+  scroll-margin-top: 24px;
+}
+
+[id^="section-"] {
+  scroll-margin-top: 20px;
+}
+
+@media (max-width: 900px) {
+  .opt-sidebar {
+    position: static;
+    width: 100%;
+    height: auto;
+    padding: 12px 0;
+    border-right: none;
+    border-bottom: 1px solid var(--bd);
+  }
+  .opt-sidebar-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 0 12px;
+    gap: 6px;
+  }
+  .opt-nav-link {
+    border-left: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 6px;
+    padding: 8px 12px;
+  }
+  .opt-nav-link.active,
+  body:not(:has([id^="section-"]:target)) .opt-nav-link[href="#section-ai"],
+  body:has(#section-ai:target) .opt-nav-link[href="#section-ai"],
+  body:has(#section-bulk:target) .opt-nav-link[href="#section-bulk"],
+  body:has(#section-general:target) .opt-nav-link[href="#section-general"],
+  body:has(#section-shortcuts:target) .opt-nav-link[href="#section-shortcuts"],
+  body:has(#section-about:target) .opt-nav-link[href="#section-about"],
+  body:has(#section-danger:target) .opt-nav-link[href="#section-danger"] {
+    border-left-color: transparent;
+    border-bottom-color: #00cfff;
+  }
+  .opt-main {
+    margin-left: 0;
+  }
+}
+
+/* Custom Columns */
+.opt-col-item.custom-col {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 6px;
+}
+
+.opt-col-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--tx-3);
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all var(--t-fast);
+}
+
+.opt-col-del:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
