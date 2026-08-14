@@ -4079,7 +4079,13 @@ async function startBulkHunt(tabsOverride) {
 
   try {
     updateBulkProgressTitle(`🔄 Processing ${selectedTabs.length} tabs…`);
-    await processSmartQueue(selectedTabs);
+    await processSmartQueue(selectedTabs); // Phase 1: scrape all tabs
+
+    // Phase 2: download images for all results in a global concurrent pool.
+    // Runs AFTER all tabs are scraped so workers aren't blocked waiting for images.
+    if (!BulkState.isCancelled) {
+      await imageDownloadPhase();
+    }
   } catch (e) {
     toast('Bulk hunt error: ' + (e?.message || 'unknown'), 'err');
   }
@@ -4252,7 +4258,7 @@ async function scrapeOneTab(tabInfo) {
         chrome.tabs.reload(tabInfo.tabId, {}, () => { void chrome.runtime.lastError; });
       }
       if (tabDetails.discarded || tabDetails.status !== 'complete') {
-        for (let i = 0; i < 60; i++) {
+        for (let i = 0; i < 20; i++) { // was 60 (30s max) → 20 (10s max)
           if (BulkState.isCancelled) { setBulkRowStatus(tabInfo.tabId, 'fail', { error: 'cancelled' }); return; }
           tabDetails = await new Promise(resolve => chrome.tabs.get(tabInfo.tabId, t => resolve(chrome.runtime.lastError ? null : t)));
           if (!tabDetails || tabDetails.status === 'complete') break;
@@ -4599,30 +4605,10 @@ async function scrapeOneTab(tabInfo) {
     status = 'ok';
   }
 
-  // PERF: Batch image download — one message to background instead of N separate
-  // messages. Background uses mapPool(5) for parallel fetch internally.
-  let imagesBase64 = [];
-  if (scraped && Array.isArray(scraped.images) && scraped.images.length > 0) {
-    const urls = scraped.images.slice(0, 15);
-    setBulkRowMeta(tabInfo.tabId, `${urls.length} imgs · downloading…`);
-    try {
-      const batchRes = await msg({ action: 'FETCH_BASE64_BATCH', urls });
-      if (batchRes?.success && Array.isArray(batchRes.results)) {
-        imagesBase64 = batchRes.results
-          .filter(r => r && r.success && r.base64)
-          .map(r => r.base64);
-      }
-    } catch (_) {}
-    setBulkRowMeta(tabInfo.tabId, `${imagesBase64.length}/${urls.length} imgs`);
-  }
-
-  // Re-evaluate status using ACTUAL base64 results (not just scraped URL list).
-  // A product can have scraped images but ALL fetch calls fail → should be 'partial',
-  // not 'ok', so the user knows images are missing.
-  if (status === 'ok' && scraped && scraped.images?.length > 0 && imagesBase64.length === 0) {
-    status = 'partial'; // images were scraped but none downloaded successfully
-    if (!error) error = 'img_fetch_failed';
-  }
+  // PERF: Image download is now deferred to imageDownloadPhase() which runs
+  // AFTER all tabs are scraped. This frees worker slots immediately after
+  // scraping so the hunt loop runs at full speed without waiting per image.
+  const imagesBase64 = [];
 
   const result = {
     tabId:    tabInfo.tabId,
@@ -4645,15 +4631,22 @@ async function scrapeOneTab(tabInfo) {
     return;
   }
 
-  // Keep a lightweight stub in memory to prevent crashes
+  // Lightweight stub — must include: images (URLs for Phase 2 download),
+  // imagesBase64 (populated by imageDownloadPhase), price (for export sheet)
   BulkState.results.push({
-    tabId:    result.tabId,
-    url:      result.url,
-    title:    result.title,
-    status:   result.status,
-    error:    result.error,
-    imageCount: result.images?.length || 0,
-    videoCount: result.videos?.length || 0
+    tabId:       result.tabId,
+    url:         result.url,
+    title:       result.title,
+    price:       result.price,        // ← needed for export
+    platform:    result.platform,
+    status:      result.status,
+    error:       result.error,
+    images:      result.images || [], // ← needed for imageDownloadPhase
+    imagesBase64: [],                 // ← filled by imageDownloadPhase
+    videos:      result.videos || [],
+    variants:    result.variants || [],
+    description: result.description || '',
+    scrapedAt:   result.scrapedAt
   });
 
   if (status !== 'fail') {
@@ -4665,6 +4658,58 @@ async function scrapeOneTab(tabInfo) {
     error
   });
   updateBulkProgressBar();
+}
+
+// ── Phase 2: Image Download (runs after all tabs scraped) ─────────────────
+// Instead of downloading images inline in scrapeOneTab (which blocks each
+// worker slot for the full image-download duration), we collect all image
+// URLs first, then download them in a global concurrent pool.
+//
+// Benefit: with 12 parallel scrape workers each taking ~3s, 14 tabs finish
+// scraping in ~4s. Image download for all 14 results then runs with 6
+// concurrent FETCH_BASE64_BATCH calls (each internally parallel in background.js).
+async function imageDownloadPhase() {
+  // Collect all results that have image URLs to download
+  const pending = BulkState.results.filter(r => r.images?.length > 0 && r.status !== 'fail');
+  if (!pending.length) return;
+
+  updateBulkProgressTitle(`📷 Downloading images for ${pending.length} products…`);
+
+  let cursor = 0;
+  const CONCUR = 2; // 2 parallel FETCH_BASE64_BATCH calls (safer for network congestion)
+
+  const workers = Array.from({ length: CONCUR }, async () => {
+    while (cursor < pending.length && !BulkState.isCancelled) {
+      const r = pending[cursor++]; // safe: JS is single-threaded between awaits
+      if (!r) break;
+      try {
+        const urls = (r.images || []).slice(0, 7); // max 7 per product
+        const batchRes = await msg({ action: 'FETCH_BASE64_BATCH', urls });
+        if (batchRes?.success && Array.isArray(batchRes.results)) {
+          r.imagesBase64 = batchRes.results
+            .filter(x => x?.success && x.base64)
+            .map(x => x.base64);
+        } else {
+          r.imagesBase64 = [];
+        }
+      } catch (_) {
+        r.imagesBase64 = [];
+      }
+
+      // Update row UI and re-evaluate status if images failed
+      const imgCount = r.imagesBase64?.length || 0;
+      setBulkRowMeta(r.tabId, `${imgCount} imgs`);
+      if (r.status === 'ok' && r.images?.length > 0 && imgCount === 0) {
+        r.status = 'partial';
+        r.error  = 'img_fetch_failed';
+        setBulkRowStatus(r.tabId, 'partial', { images: 0, error: 'img_fetch_failed' });
+      } else {
+        setBulkRowStatus(r.tabId, r.status, { images: imgCount, error: r.error });
+      }
+    }
+  });
+
+  await Promise.all(workers);
 }
 
 function getTabUrl(tabId) {
@@ -4952,7 +4997,7 @@ async function appendToMasterSheet(rows) {
     variants:     (r.variants || []).join(', '),
     imageCount:   Array.isArray(r.images) ? r.images.length : 0,
     videoCount:   Array.isArray(r.videos) ? r.videos.length : 0,
-    images:       Array.isArray(r.images) ? r.images.slice(0, 8) : [],   // raw URLs only (for re-hunt)
+    images:       Array.isArray(r.images) ? r.images.slice(0, 7) : [],   // raw URLs only (for re-hunt)
     videos:       Array.isArray(r.videos) ? r.videos.slice(0, 4) : [],
     status:       r.status,
     scrapedAt:    r.scrapedAt,
@@ -5263,7 +5308,7 @@ async function reHuntMasterRow(rowId) {
       variants:     Array.isArray(scraped.variants) ? scraped.variants.join(', ') : r.variants,
       imageCount:   Array.isArray(scraped.images) ? scraped.images.length : r.imageCount,
       videoCount:   Array.isArray(scraped.videos) ? scraped.videos.length : r.videoCount,
-      images:       Array.isArray(scraped.images) ? scraped.images.slice(0, 8) : r.images,
+      images:       Array.isArray(scraped.images) ? scraped.images.slice(0, 7) : r.images,
       videos:       Array.isArray(scraped.videos) ? scraped.videos.slice(0, 4) : r.videos,
       status:       'ok',
       lastRehunted: new Date().toISOString()

@@ -15,8 +15,8 @@ const SUCCESS_COLOR = '#10b981';
 const IMG_CAP = 15;
 const VID_CAP = 12;
 
-const FETCH_CONCURRENCY = 8;
-const FETCH_TIMEOUT_MS  = 9000;
+const FETCH_CONCURRENCY = 8;   // was 16 — moderate concurrency to prevent network congestion
+const FETCH_TIMEOUT_MS  = 12000; // was 5000 — safer timeout to prevent image download failures
 const FETCH_MAX_BYTES   = 6 * 1024 * 1024;
 const AI_TIMEOUT_MS     = 28000;
 
