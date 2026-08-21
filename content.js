@@ -1,5 +1,5 @@
 // ============================================================
-// ZHunter PRO v7.6.1 — Content Script
+// ZHunter PRO v7.9.15 — Content Script
 // ============================================================
 // Fixes vs 7.6.0:
 //   • Issue 1: Correct price extraction — reads full price string
@@ -245,7 +245,14 @@ function findProductGalleryContainer() {
     '#imageBlock_feature_div',
     '#imageBlock',
     '#img-canvas',
-    // Walmart
+    // Walmart / Sam's Club live vertical carousels
+    '[data-testid="vertical-carousel-container"]',
+    '[data-testid="vertical-hero-carousel"]',
+    '[data-testid="hero-image-container"]',
+    '[data-testid="item-page-vertical-carousel-hero-image-button"]',
+    '[data-testid="media-thumbnail"]',
+    '[data-testid="zoom-image"]',
+    '[data-testid="zoom-panel"]',
     '[data-automation-id="product-media"]',
     '[data-testid="product-media"]',
     '.prod-hero-image-carousel-container',
@@ -426,6 +433,62 @@ function pickAmazonDynamic(img) {
     entries.sort((a, b) => (b[1]?.[0] || 0) - (a[1]?.[0] || 0));
     return entries[0]?.[0] || '';
   } catch (_) { return ''; }
+}
+
+// Live marketplace gallery collector. Walmart and Sam's Club often render
+// product media after the initial HTML response, using data-* attributes or
+// srcset instead of a stable JSON payload.
+function collectLiveMarketplaceImages(platform) {
+  const out = [];
+  const seen = new Set();
+  const add = raw => {
+    if (!raw || typeof raw !== 'string') return;
+    const value = raw.trim().replace(/\\\//g, '/');
+    if (!/^https?:|^\//i.test(value)) return;
+    const abs = absUrl(value);
+    if (isBadImage(abs)) return;
+    const normalized = normalizeImg(abs);
+    const key = canonImageKey(normalized);
+    if (seen.has(key)) return;
+    seen.add(key); out.push(normalized);
+  };
+  const addSrcset = raw => {
+    if (!raw) return;
+    const candidates = String(raw).split(',').map(part => {
+      const bits = part.trim().split(/\s+/);
+      const descriptor = bits[1] || '';
+      const score = parseFloat(descriptor) || 0;
+      return { url: bits[0], score };
+    }).filter(item => item.url);
+    candidates.sort((a, b) => b.score - a.score).forEach(item => add(item.url));
+  };
+  const gallerySelectors = platform === 'walmart' ? [
+    '[data-automation-id="product-media"]', '[data-automation-id*="product"]',
+    '[data-testid*="product-media"]', '[data-testid*="media"]', '[data-testid*="gallery"]',
+    '[data-testid*="carousel"]', '[class*="prod-hero"]', '[class*="product-media"]',
+    '[class*="ProductMedia"]', '[class*="gallery"]', '[class*="Gallery"]',
+    'main', '[role="main"]'
+  ] : [
+    '[data-testid="product-image-container"]', '[data-testid*="item-page"]',
+    '[data-testid*="product-image"]', '[data-testid*="media"]', '[data-testid*="gallery"]',
+    '[class*="sc-image"]', '[class*="ImageViewer"]', '[class*="image-gallery"]',
+    '[class*="product-image"]', '[class*="ProductImage"]', '[class*="gallery"]',
+    'main', '[role="main"]'
+  ];
+  const scopes = [];
+  const primary = findProductGalleryContainer();
+  if (primary) scopes.push(primary);
+  gallerySelectors.forEach(selector => document.querySelectorAll(selector).forEach(el => scopes.push(el)));
+  if (!scopes.length) scopes.push(document);
+  const elements = new Set();
+  scopes.forEach(scope => scope.querySelectorAll('img, source, [data-image-url], [data-image-src], [data-zoom-image], [data-src], [data-lazy-src]').forEach(el => elements.add(el)));
+  elements.forEach(el => {
+    if (el.tagName === 'IMG' && isBadImageElement(el)) return;
+    ['data-old-hires', 'data-zoom-image', 'data-image-url', 'data-image-src', 'data-large-image', 'data-src', 'data-lazy-src', 'data-original', 'src'].forEach(attr => add(el.getAttribute(attr)));
+    addSrcset(el.getAttribute('srcset') || el.getAttribute('data-srcset'));
+    if (el.tagName === 'IMG' && el.naturalWidth >= 80) add(el.currentSrc || el.src);
+  });
+  return out;
 }
 
 // ── DOM video collection ────────────────────────────────────
@@ -1031,9 +1094,30 @@ function scrapeAmazon() {
     r.images.push(sized);
   }
 
-  // Pass 1: Script tag JSON extraction — most reliable, layout-independent.
+  // DOM-first gallery extraction: the visible gallery is authoritative. This
+  // prevents recommendation/variant media found in page-wide scripts from
+  // inflating the product count. Amazon's two layouts share these selectors.
+  const amazonGalleryImages = document.querySelectorAll(
+    '#landingImage, #imgTagWrapperId img, #altImages img, .a-button-thumbnail img, .imageThumbnail img'
+  );
+  amazonGalleryImages.forEach(img => {
+    const candidates = [
+      img.getAttribute('data-old-hires') || '',
+      pickAmazonDynamic(img),
+      img.getAttribute('data-zoom-image') || '',
+      img.getAttribute('data-large-image') || '',
+      img.src || img.getAttribute('data-src') || ''
+    ];
+    candidates.forEach(candidate => {
+      if (/play[-_]?button|video[-_]?thumbnail|pkplay/i.test(candidate)) return;
+      if (img.getAttribute('data-old-hires') === candidate) addHiResImg(candidate);
+      else addFallbackImg(candidate);
+    });
+  });
+
+  // Pass 1: Script tag JSON extraction — only if the visible gallery was empty.
   const scripts = document.querySelectorAll('script');
-  for (const script of scripts) {
+  if (r.images.length === 0) for (const script of scripts) {
     const t = script.textContent || '';
     if (!t.includes('colorImages') && !t.includes('ImageBlockATF') &&
         !t.includes('hiRes') && !t.includes('thumbImages')) continue;
@@ -1071,8 +1155,8 @@ function scrapeAmazon() {
     }
   }
 
-  // Pass 2: Raw Amazon CDN URL scan — upscale all found URLs to 1500px
-  for (const script of scripts) {
+  // Pass 2: Raw Amazon CDN URL scan — only if targeted script extraction found nothing.
+  if (r.images.length === 0) for (const script of scripts) {
     const t = script.textContent || '';
     const rawScan = /https:\/\/(?:m\.media-amazon\.com|images-amazon\.com)\/images\/I\/[A-Za-z0-9%+\-_.]+\.(?:jpg|jpeg|png|webp)/g;
     let match;
@@ -1108,7 +1192,7 @@ function scrapeAmazon() {
     });
   }
 
-  r._strictImages = true; // Prevents generic JSON harvest from mixing unrelated products
+
 
   // ── AMAZON VIDEO EXTRACTION — Multi-pass with dedup ──────────────────────
   // Amazon embeds video data in several places:
@@ -1271,7 +1355,12 @@ function scrapeWalmart() {
     });
   }
 
-  r._strictImages = true;
+  // Always merge live gallery media: Walmart can expose a partial __NEXT_DATA__
+  // payload while the remaining product images arrive through lazy DOM attributes.
+  collectLiveMarketplaceImages('walmart').forEach(image => {
+    if (!r.images.some(existing => canonImageKey(existing) === canonImageKey(image))) r.images.push(image);
+  });
+
 
   // Extract videos from __NEXT_DATA__ JSON (Walmart: mediaAssets + Brightcove player)
   try {
@@ -1325,8 +1414,7 @@ function scrapeWalmart() {
 function scrapeSamsClub() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
 
-  const scItemIdMatch = location.pathname.match(/\/ip\/[^/]+\/(\d{6,})/);
-  r._scItemId = scItemIdMatch ? scItemIdMatch[1] : '';
+
 
   const titleEl = document.querySelector(
     'h1.sc-product-title, h1[data-testid="product-title"], h1[data-automation-id="product-title"], h1'
@@ -1412,7 +1500,12 @@ function scrapeSamsClub() {
     });
   }
 
-  r._strictImages = true;
+  // Always merge live gallery media: Sam's Club may render image assets after
+  // the initial React state has been created or use a different carousel DOM.
+  collectLiveMarketplaceImages('samsclub').forEach(image => {
+    if (!r.images.some(existing => canonImageKey(existing) === canonImageKey(image))) r.images.push(image);
+  });
+
 
   // Extract videos from __NEXT_DATA__ JSON
   // Sam's Club shares Walmart's Next.js infrastructure BUT uses Brightcove player.
@@ -2393,7 +2486,8 @@ async function scrapePageData() {
   // that Amazon and other sites temporarily set as the page/tab title.
   const BAD_TITLE = /^(adding to cart|add to cart|added to cart|loading\.\.\.|please wait\.\.\.?|checkout|your amazon\.com cart|amazon\.com shopping cart|cart|processing)/i;
   const docTitle = BAD_TITLE.test((document.title || '').trim()) ? '' : document.title;
-  data.title    = (data.title || docTitle || '').trim();
+  const candidateTitle = (data.title || docTitle || '').trim();
+  data.title = BAD_TITLE.test(candidateTitle) ? '' : candidateTitle;
 
   // ISSUE 1 FIX: Ensure price has a currency symbol — detect from page
   if (data.price && !/[$£€¥₹₩]/.test(data.price) && !/^(USD|CAD|AUD|GBP|EUR|PKR|INR)/i.test(data.price)) {
@@ -2409,6 +2503,230 @@ async function scrapePageData() {
   return data;
 }
 
+// ── Product-page image card ─────────────────────────────────
+// A lightweight page-level action card keeps the most common image workflow
+// next to the product. It reuses scrapePageData and the local downloads API.
+let _zhunterPageCard = null;
+
+function isLikelyProductPage() {
+  try {
+    const path = location.pathname.toLowerCase();
+    const productPath = /\/(dp|gp\/product|ip|itm|listing|products?|product|goods|item|p)\//i.test(path);
+    const productDom = !!document.querySelector(
+      '#productTitle, [data-asin], [data-product-id], [itemtype*="Product"], ' +
+      '[data-testid*="product"], [class*="product-title"], [class*="ProductTitle"], ' +
+      'meta[property="og:type"][content*="product"], form[action*="/cart/add"]'
+    );
+    const productJson = [...document.querySelectorAll('script[type="application/ld+json"]')]
+      .some(s => /"@type"\s*:\s*("Product"|\[.*Product)/i.test(s.textContent || ''));
+    return productPath || productDom || productJson;
+  } catch (_) { return false; }
+}
+
+async function scrapePageDataWithRetries() {
+  const waits = [0, 700, 1600, 3000];
+  let latest = null;
+  for (const wait of waits) {
+    if (wait) await new Promise(resolve => setTimeout(resolve, wait));
+    try {
+      latest = await scrapePageData();
+      if ((latest?.images?.length || 0) >= 2 || wait === waits[waits.length - 1]) return latest || {};
+    } catch (_) {}
+  }
+  return latest || {};
+}
+
+function initProductImageCard() {
+  if (_zhunterPageCard || !document.body || !isLikelyProductPage()) return;
+  _zhunterPageCard = document.createElement('div');
+  _zhunterPageCard.id = 'zhunter-product-image-card';
+  const shadow = _zhunterPageCard.attachShadow({ mode: 'open' });
+  shadow.innerHTML = `
+    <style>
+      :host{all:initial;position:fixed;right:14px;bottom:14px;z-index:2147483647;max-width:calc(100vw - 20px);font-family:Arial,sans-serif;color:#e6f7ff}
+      .card{width:248px;background:linear-gradient(145deg,#0b1a2e,#07111f);border:1px solid rgba(34,211,238,.48);border-radius:11px;box-shadow:0 10px 28px rgba(0,0,0,.38),0 0 0 1px rgba(8,145,178,.14);overflow:hidden;transition:width .18s ease,box-shadow .18s ease,transform .18s ease;animation:zh-enter .26s ease-out both}
+      .card.busy{box-shadow:0 12px 34px rgba(0,0,0,.44),0 0 18px rgba(34,211,238,.18)}
+      .card.success{border-color:rgba(110,231,183,.65)}
+      .card.error{border-color:rgba(251,113,133,.72)}
+      @keyframes zh-enter{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+      @keyframes zh-pulse{0%,100%{opacity:.55}50%{opacity:1}}
+      @keyframes zh-progress{from{transform:translateX(-100%)}to{transform:translateX(260%)}}
+      @media (prefers-reduced-motion:reduce){.card{animation:none;transition:none}.progress.indeterminate span{animation:none}}
+      .progress{display:none;height:3px;background:rgba(148,163,184,.15);overflow:hidden}.progress.visible{display:block}.progress span{display:block;height:100%;width:0;background:#22d3ee;transition:width .2s ease}.progress.indeterminate span{width:38%;animation:zh-progress 1.1s ease-in-out infinite}
+      .head{display:flex;align-items:center;gap:7px;padding:8px 9px;border-bottom:1px solid rgba(148,163,184,.14);min-height:28px;box-sizing:border-box;cursor:grab;user-select:none}.head.dragging{cursor:grabbing}
+      .brand{display:flex;align-items:center;gap:6px;min-width:0;flex:1;font-size:11px;font-weight:800;letter-spacing:.1px;white-space:nowrap}.brand>span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dot{width:7px;height:7px;flex:none;border-radius:50%;background:#22d3ee;box-shadow:0 0 8px #22d3ee}
+      .mini{display:grid;place-items:center;flex:none;width:20px;height:20px;border:1px solid rgba(148,163,184,.25);border-radius:50%;background:rgba(148,163,184,.08);color:#c9e5ef;cursor:pointer;font-size:13px;line-height:1;padding:0}.mini:hover{border-color:#22d3ee;background:rgba(34,211,238,.14);color:#fff}
+      .body{padding:9px}.select-row{display:flex;align-items:center;gap:7px;color:#a8c3d0;font-size:9px}.select-row label{display:flex;align-items:center;gap:3px;cursor:pointer}.select-row input{accent-color:#22d3ee}.select-clear{border:0;background:transparent;color:#8fb1c0;font-size:9px;cursor:pointer;padding:0}.select-clear:hover{color:#fff}.thumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:7px}.thumb{position:relative;display:block;height:48px;border:1px solid rgba(148,163,184,.22);border-radius:5px;overflow:hidden;background:#0b1b2e;cursor:pointer}.thumb img{width:100%;height:100%;object-fit:cover;display:block}.thumb input{position:absolute;left:1px;top:1px;z-index:1;accent-color:#22d3ee;margin:0}.thumb:not(:has(input:checked)){opacity:.40}.actions{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:8px}.btn{border:1px solid rgba(148,163,184,.22);border-radius:7px;padding:7px 5px;background:#10243c;color:#d9f6ff;font-size:9px;font-weight:700;cursor:pointer}.btn.primary{background:#0786a7;border-color:#22d3ee;color:#fff}.btn:hover{filter:brightness(1.15)}.btn:disabled{opacity:.5;cursor:wait}.status{min-height:12px;margin-top:7px;color:#91b0c1;font-size:9px;line-height:1.3;transition:color .16s ease}.status.ok{color:#6ee7b7}.status.warn{color:#fcd34d}.status.err{color:#fb7185}.status.busy{animation:zh-pulse 1.2s ease-in-out infinite}.retry{display:none;width:100%;margin-top:6px;padding:6px;border:1px solid rgba(251,191,36,.34);border-radius:7px;background:rgba(146,64,14,.22);color:#fde68a;font-size:9px;font-weight:700;cursor:pointer}.retry.visible{display:block}.retry:hover{background:rgba(146,64,14,.38)}.collapsed .body{display:none}.collapsed.card{width:178px}.collapsed .head{border-bottom:0;padding:7px 9px}.collapsed .brand>span:last-child{font-size:10px}.collapsed .mini{width:19px;height:19px}
+    </style>
+    <div class="card"><div class="head"><div class="brand"><span class="dot"></span><span>ZHunter Images</span></div><button class="mini" id="min" title="Minimize">−</button></div><div class="body"><div class="select-row"><label><input id="selectAll" type="checkbox" checked> Select all</label><button class="select-clear" id="clearSelection" type="button">Clear</button></div><div class="thumbs" id="thumbs"></div><div class="actions"><button class="btn primary" id="download" disabled>Download Selected</button><button class="btn" id="add">Add to Queue</button></div><div class="progress" id="progress"><span id="progressBar"></span></div><div class="status" id="status" role="status" aria-live="polite">Scanning images…</div><button class="retry" id="retry" type="button">Retry</button></div></div>`;
+  document.body.appendChild(_zhunterPageCard);
+
+  const root = shadow;
+  const card = root.querySelector('.card');
+  const statusEl = root.querySelector('#status');
+  const downloadBtn = root.querySelector('#download');
+  const thumbsEl = root.querySelector('#thumbs');
+  const selectAllEl = root.querySelector('#selectAll');
+  const progressEl = root.querySelector('#progress');
+  const progressBarEl = root.querySelector('#progressBar');
+  const retryBtn = root.querySelector('#retry');
+  const addBtn = root.querySelector('#add');
+  let pageData = null;
+  let failedDownloadUrls = [];
+  let scanToken = 0;
+  const setState = state => { card.classList.remove('busy', 'success', 'error'); if (state) card.classList.add(state); };
+  const status = (text, type = '') => { statusEl.textContent = text; statusEl.className = 'status' + (type ? ' ' + type : ''); };
+  const setProgress = (value, indeterminate = false) => {
+    progressEl.classList.toggle('visible', value !== null || indeterminate);
+    progressEl.classList.toggle('indeterminate', indeterminate);
+    progressBarEl.style.width = indeterminate ? '38%' : `${Math.max(0, Math.min(100, value || 0))}%`;
+  };
+  const showRetry = (visible, label = 'Retry') => { retryBtn.textContent = label; retryBtn.classList.toggle('visible', visible); };
+  const selectedUrls = () => [...root.querySelectorAll('.thumb input:checked')].map(input => pageData?.images?.[Number(input.dataset.index)]).filter(Boolean);
+  const refreshSelection = () => {
+    const count = selectedUrls().length;
+    selectAllEl.checked = !!pageData?.images?.length && count === pageData.images.length;
+    downloadBtn.disabled = count === 0;
+  };
+  const renderThumbs = images => {
+    thumbsEl.textContent = '';
+    images.slice(0, 7).forEach((url, index) => {
+      const label = document.createElement('label');
+      label.className = 'thumb';
+      const input = document.createElement('input');
+      input.type = 'checkbox'; input.checked = true; input.dataset.index = String(index);
+      input.addEventListener('change', refreshSelection);
+      const img = document.createElement('img');
+      img.src = url; img.alt = `Product image ${index + 1}`; img.loading = 'lazy';
+      label.append(input, img); thumbsEl.appendChild(label);
+    });
+    refreshSelection();
+  };
+
+  const scanPage = async () => {
+    const token = ++scanToken;
+    failedDownloadUrls = [];
+    showRetry(false);
+    setState('busy');
+    setProgress(null, true);
+    status('Scanning images…', 'busy');
+    downloadBtn.disabled = true;
+    addBtn.disabled = true;
+    try {
+      const data = await scrapePageDataWithRetries();
+      if (token !== scanToken) return;
+      pageData = data || {};
+      pageData.images = Array.isArray(pageData.images) ? pageData.images.slice(0, 7) : [];
+      renderThumbs(pageData.images);
+      setProgress(100);
+      if (pageData.images.length) {
+        setState('success');
+        status('Choose images, then download.', 'ok');
+        showRetry(false);
+      } else {
+        setState('error');
+        status('No product images found. The gallery may still be loading.', 'warn');
+        showRetry(true, 'Retry image scan');
+      }
+    } catch (_) {
+      setState('error');
+      setProgress(0);
+      status('Image scan failed. You can retry without leaving the page.', 'err');
+      showRetry(true, 'Retry image scan');
+    } finally {
+      if (token === scanToken) addBtn.disabled = false;
+    }
+  };
+
+  const downloadImages = urls => {
+    const uniqueUrls = [...new Set((urls || []).filter(Boolean))].slice(0, 7);
+    if (!uniqueUrls.length) return status('Select at least one image first.', 'warn');
+    failedDownloadUrls = [];
+    setState('busy');
+    setProgress(null, true);
+    showRetry(false);
+    downloadBtn.disabled = true;
+    addBtn.disabled = true;
+    status(`Downloading ${uniqueUrls.length} image${uniqueUrls.length === 1 ? '' : 's'}…`, 'busy');
+    chrome.runtime.sendMessage({ action: 'DOWNLOAD_PAGE_IMAGES', urls: uniqueUrls, title: pageData?.title }, result => {
+      const started = Number(result?.started || 0);
+      const requested = Number(result?.requested || uniqueUrls.length);
+      const failed = Number(result?.failed || Math.max(0, requested - started));
+      failedDownloadUrls = Array.isArray(result?.failedUrls) ? result.failedUrls : [];
+      setProgress(requested ? Math.round((started / requested) * 100) : 0);
+      addBtn.disabled = false;
+      refreshSelection();
+      if (result?.success && failed === 0) {
+        setState('success');
+        status(`${started} image${started === 1 ? '' : 's'} downloaded successfully.`, 'ok');
+        showRetry(false);
+      } else if (started > 0) {
+        setState('error');
+        status(`${started}/${requested} downloaded; ${failed} failed.`, 'warn');
+        showRetry(failedDownloadUrls.length > 0, 'Retry failed downloads');
+      } else {
+        setState('error');
+        status('Download failed. Check permissions or retry.', 'err');
+        showRetry(true, 'Retry download');
+      }
+    });
+  };
+
+  const headerEl = root.querySelector('.head');
+  root.querySelector('#min').addEventListener('click', () => {
+    card.classList.toggle('collapsed');
+    root.querySelector('#min').textContent = card.classList.contains('collapsed') ? '+' : '−';
+    root.querySelector('#min').title = card.classList.contains('collapsed') ? 'Expand ZHunter Images' : 'Minimize ZHunter Images';
+  });
+  let dragState = null;
+  headerEl.addEventListener('pointerdown', event => {
+    if (event.target.closest('#min')) return;
+    const rect = _zhunterPageCard.getBoundingClientRect();
+    dragState = { dx: event.clientX - rect.left, dy: event.clientY - rect.top };
+    headerEl.classList.add('dragging');
+    headerEl.setPointerCapture?.(event.pointerId);
+  });
+  headerEl.addEventListener('pointermove', event => {
+    if (!dragState) return;
+    const rect = _zhunterPageCard.getBoundingClientRect();
+    const left = Math.max(8, Math.min(window.innerWidth - rect.width - 8, event.clientX - dragState.dx));
+    const top = Math.max(8, Math.min(window.innerHeight - rect.height - 8, event.clientY - dragState.dy));
+    _zhunterPageCard.style.left = `${left}px`;
+    _zhunterPageCard.style.top = `${top}px`;
+    _zhunterPageCard.style.right = 'auto';
+    _zhunterPageCard.style.bottom = 'auto';
+  });
+  const finishDrag = () => { dragState = null; headerEl.classList.remove('dragging'); };
+  headerEl.addEventListener('pointerup', finishDrag);
+  headerEl.addEventListener('pointercancel', finishDrag);
+  selectAllEl.addEventListener('change', () => {
+    root.querySelectorAll('.thumb input').forEach(input => { input.checked = selectAllEl.checked; });
+    refreshSelection();
+  });
+  root.querySelector('#clearSelection').addEventListener('click', () => {
+    selectAllEl.checked = false;
+    root.querySelectorAll('.thumb input').forEach(input => { input.checked = false; });
+    refreshSelection();
+  });
+  root.querySelector('#add').addEventListener('click', () => {
+    if (!pageData) return status('Still scanning the product…', 'warn');
+    chrome.runtime.sendMessage({ action: 'ADD_PRODUCT_QUEUE', items: [{ url: location.href, title: pageData.title, price: pageData.price, source: 'page_card' }] }, result => {
+      if (result?.addedCount) status('Added to Product Queue.', 'ok');
+      else status('Already saved or unsupported page.', 'warn');
+    });
+  });
+  downloadBtn.addEventListener('click', () => downloadImages(selectedUrls()));
+  retryBtn.addEventListener('click', () => {
+    if (failedDownloadUrls.length) downloadImages(failedDownloadUrls);
+    else scanPage();
+  });
+
+  scanPage();
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(initProductImageCard, 900), { once: true });
+else setTimeout(initProductImageCard, 900);
+
 // ── Message Listener ────────────────────────────────────────
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   try {
@@ -2422,6 +2740,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           data: { title: document.title || '', url: location.href, price: '', images: [], videos: [], variants: [] }
         });
       });
+      return true;
+    }
+    if (message?.action === 'GET_PRODUCT_LINKS') {
+      const seen = new Set();
+      const links = [];
+      document.querySelectorAll('a[href], [data-href]').forEach(anchor => {
+        const raw = anchor.getAttribute('href') || anchor.getAttribute('data-href') || '';
+        try {
+          const u = new URL(raw, location.href);
+          if (u.protocol !== 'http:' && u.protocol !== 'https:') return;
+          u.hash = '';
+          const url = u.href;
+          if (seen.has(url)) return;
+          seen.add(url);
+          links.push({ url, title: (anchor.textContent || anchor.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim().slice(0, 300) });
+        } catch (_) {}
+      });
+      sendResponse({ success: true, links: links.slice(0, 500) });
       return true;
     }
     if (message?.action === 'GET_PAGE_INFO') {

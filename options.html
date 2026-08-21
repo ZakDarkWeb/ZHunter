@@ -812,7 +812,7 @@
             <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
           </span>
         </button>
-        <div class="opt-version" data-version>v7.6.1</div>
+        <div class="opt-version" data-version>v7.9.15</div>
       </div>
     </div>
 
@@ -851,24 +851,13 @@
         <div class="opt-sep"></div>
 
         <div class="opt-row" style="flex-direction:column; align-items:stretch; gap:10px;">
-          <div class="opt-row-label">Sheet columns to include</div>
+          <div class="opt-row-label">Product Sheet format</div>
           <div class="opt-row-desc">
-            Choose which columns appear in your XLSX, CSV, and HTML catalog. Profit auto-calculates from List Price &minus; Source Price &minus; Label Cost.
+            Final export format is fixed for consistency across Extract Product Sheet, Sheet Copy, and Master ZIP: Folder Number, Product Title, Link, and Sourcing Price. The green professional header and folder mapping are applied automatically.
           </div>
-          <div class="api-key-wrap">
-            <input
-              type="text"
-              id="customColInput"
-              class="api-key-input"
-              placeholder="E.g., Supplier Name, Notes, Status"
-              maxlength="40"
-              autocomplete="off"
-              spellcheck="false"
-            />
-            <button id="addCustomColBtn" class="btn btn-theme btn-sm" type="button">Add Column</button>
+          <div class="queue-format-preview" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:2px;">
+            <span>Folder Number</span><span>Product Title</span><span>Link</span><span>Sourcing Price</span>
           </div>
-          <div id="optBulkColumnsGrid" class="opt-bulk-cols-grid"></div>
-          <div id="optBulkColumnsStatus" class="api-status hidden"></div>
         </div>
 
         <div class="opt-sep"></div>
