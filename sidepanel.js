@@ -3814,12 +3814,12 @@ const BulkState = {
   currentBatchId: null,
   huntStartTime:  null, // for live speed/ETA stats
 
-  // Tunables — optimized for speed
-  PARALLEL:    10,   // 10 concurrent workers (was 8)
+  // Tunables — maximum speed pipeline
+  PARALLEL:    14,   // 14 concurrent workers
   CHUNK_SIZE:  40,   // 40 tabs per chunk
-  TAB_TIMEOUT: 8000, // 8s per tab
-  CHUNK_PAUSE: 400,  // 0.4s between chunks (was 0.8s)
-  MAX_RETRIES: 2,    // 2 retries
+  TAB_TIMEOUT: 4000, // 4s per tab — fail fast, fallback is instant
+  CHUNK_PAUSE: 200,  // 0.2s between chunks
+  MAX_RETRIES: 1,    // 1 retry
   AUTO_CLOSE_TABS: false // close each tab immediately after successful scrape
 };
 
@@ -4523,13 +4523,12 @@ async function scrapeOneTab(tabInfo) {
         chrome.tabs.reload(tabInfo.tabId, {}, () => { void chrome.runtime.lastError; });
       }
       if (tabDetails.discarded || tabDetails.status !== 'complete') {
-        for (let i = 0; i < 20; i++) { // 20 × 300ms = 6s max wait
+        for (let i = 0; i < 10; i++) { // 10 × 200ms = 2s max wait
           if (BulkState.isCancelled) { setBulkRowStatus(tabInfo.tabId, 'fail', { error: 'cancelled' }); return; }
           tabDetails = await new Promise(resolve => chrome.tabs.get(tabInfo.tabId, t => resolve(chrome.runtime.lastError ? null : t)));
           if (!tabDetails || tabDetails.status === 'complete') break;
-          await sleep(300); // was 500ms
+          await sleep(200);
         }
-        if (tabDetails) await sleep(300); // was 500ms
       }
     }
 
@@ -4549,26 +4548,8 @@ async function scrapeOneTab(tabInfo) {
           target: { tabId: tabInfo.tabId },
           files: ['content.js']
         });
-        // Wait for content script to register its listener.
-        // PERF: fast content script init — 200ms is enough for listener registration
-        await sleep(200);
-        let pingOk = false;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          pingOk = await new Promise((resolve) => {
-            try {
-              chrome.tabs.sendMessage(tabInfo.tabId, { action: 'PING' }, (res) => {
-                if (chrome.runtime.lastError || !res?.ready) { resolve(false); return; }
-                resolve(true);
-              });
-            } catch (_) { resolve(false); }
-          });
-          if (pingOk) break;
-          await sleep(150);
-        }
-        // If PING never succeeds, continue anyway — the scrape may still work
-      } catch (_) {
-        // Page disallows scripting — will try messaging anyway
-      }
+        await sleep(100);
+      } catch (_) {}
     }
 
     // ── Temu: direct executeScript scrape (bypasses SPA background-tab issue) ──
@@ -4917,13 +4898,13 @@ async function scrapeOneTab(tabInfo) {
         // Refresh the tab and wait for it to finish loading (up to 15 seconds)
         try { await new Promise(r => chrome.tabs.reload(tabInfo.tabId, {}, r)); } catch (_) {}
         let reloadDetails = null;
-        for (let i = 0; i < 30; i++) {               // 30 × 500ms = 15s max
+        for (let i = 0; i < 15; i++) {               // 15 × 200ms = 3s max
           if (BulkState.isCancelled) break;
           reloadDetails = await new Promise(r => chrome.tabs.get(tabInfo.tabId, t => r(chrome.runtime.lastError ? null : t)));
           if (!reloadDetails || reloadDetails.status === 'complete') break;
-          await sleep(500);
+          await sleep(200);
         }
-        if (reloadDetails) await sleep(1500);         // Extra settle time after load event
+        if (reloadDetails) await sleep(200);
 
         if (!BulkState.isCancelled) {
           setBulkRowMeta(tabInfo.tabId, 'Retrying after refresh…');
