@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // ZHunter PRO v7.9.15 Ã¢â‚¬â€ Content Script
 // ============================================================
 // Fixes vs 7.6.0:
@@ -3089,7 +3089,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
       .img-wrap.selected .img-check { background: #00e5ff; border-color: #00e5ff; box-shadow: 0 0 8px rgba(0,229,255,0.6); }
       .img-wrap.selected .img-check::after {
-        content: '\2713';
+        content: '\\2713';
         color: #000; font-size: 10px; font-weight: 900;
         animation: zh-check-pop 0.3s cubic-bezier(0.16,1,0.3,1);
       }
