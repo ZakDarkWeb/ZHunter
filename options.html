@@ -812,7 +812,7 @@
             <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
           </span>
         </button>
-        <div class="opt-version" data-version>v7.9.15</div>
+        <div class="opt-version" data-version>v7.10.1</div>
       </div>
     </div>
 
@@ -966,6 +966,25 @@
         </div>
       </div>
       <div class="opt-card-body">
+
+        <div class="opt-row" style="flex-direction:column; align-items:stretch; gap:8px;">
+          <div class="opt-row-label">AI Provider and API Key</div>
+          <div class="opt-row-desc">Your key is stored locally and used only by ZHunter’s background worker. It is not shown in the popup or side panel.</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <select id="aiProviderSelect" class="sel" aria-label="AI provider" style="flex:0 0 130px; padding:7px 28px 7px 10px; font-size:12px;">
+              <option value="OpenRouter">OpenRouter</option>
+              <option value="Groq">Groq</option>
+              <option value="Gemini">Gemini</option>
+              <option value="OpenAI">OpenAI</option>
+            </select>
+            <input id="apiKeyInput" type="password" class="api-key-input" placeholder="Paste API key" autocomplete="off" spellcheck="false" style="flex:1; min-width:180px;" />
+            <button id="saveApiKeyBtn" class="btn btn-theme btn-sm" type="button">Save Key</button>
+            <button id="clearApiKeyBtn" class="btn btn-ghost btn-sm" type="button">Clear</button>
+          </div>
+          <div id="apiKeyStatus" class="api-status hidden" aria-live="polite"></div>
+        </div>
+
+        <div class="opt-sep"></div>
 
         <div class="opt-row">
           <div class="opt-row-info">

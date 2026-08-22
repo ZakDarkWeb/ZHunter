@@ -118,10 +118,14 @@ function normalizeImg(rawUrl) {
       ['odnHeight', 'odnWidth', 'odnBg'].forEach(p => u.searchParams.delete(p));
       return u.href;
     }
-    if (/scene7\.samsclub\.com|samsclub\.com/i.test(h)) {
-      u.searchParams.set('wid', '2000');
-      u.searchParams.set('hei', '2000');
-      u.searchParams.set('fmt', 'jpg');
+    if (/scene7\.samsclub\.com|samsclub\.com|samsclubimages\.com/i.test(h)) {
+      if (/samsclubimages\.com/i.test(h) && !/scene7/i.test(h)) {
+        ['odnHeight', 'odnWidth', 'odnBg', 'wid', 'hei'].forEach(p => u.searchParams.delete(p));
+      } else {
+        u.searchParams.set('wid', '2000');
+        u.searchParams.set('hei', '2000');
+        u.searchParams.set('fmt', 'jpg');
+      }
       return u.href;
     }
     if (/faire-cdn\.com|cdn\.faire\.com|faire\.com/i.test(h)) {
@@ -202,7 +206,7 @@ function isBadImage(url) {
   if (/walmartimages\.com/i.test(s) && /\/\d{2,3}x\d{2,3}[?/]/.test(s)) return true;
 
   // Sam's Club non-product
-  if (/samsclub\.com/i.test(s) && /\/category\/|\/banner\/|\/brand\/|\/circular\/|\/hero\/|\/nav\/|\/icon\/|\/logo\//.test(s)) return true;
+  if (/samsclub\.com|samsclubimages\.com/i.test(s) && /\/category\/|\/banner\/|\/brand\/|\/circular\/|\/hero\/|\/nav\/|\/icon\/|\/logo\//.test(s)) return true;
 
   // Temu non-product (platform chrome / tracking pixels)
   if (/temu\.com/i.test(s) && /\/platform\/|\/icon\/|\/logo\/|\/badge\/|\/header\/|\/nav\//.test(s)) return true;
@@ -450,43 +454,60 @@ function collectLiveMarketplaceImages(platform) {
     const normalized = normalizeImg(abs);
     const key = canonImageKey(normalized);
     if (seen.has(key)) return;
-    seen.add(key); out.push(normalized);
+    seen.add(key);
+    out.push(normalized);
   };
   const addSrcset = raw => {
     if (!raw) return;
     const candidates = String(raw).split(',').map(part => {
       const bits = part.trim().split(/\s+/);
       const descriptor = bits[1] || '';
-      const score = parseFloat(descriptor) || 0;
+      const score = descriptor.endsWith('w') ? parseFloat(descriptor) : parseFloat(descriptor) * 1000 || 0;
       return { url: bits[0], score };
     }).filter(item => item.url);
     candidates.sort((a, b) => b.score - a.score).forEach(item => add(item.url));
   };
-  const gallerySelectors = platform === 'walmart' ? [
-    '[data-automation-id="product-media"]', '[data-automation-id*="product"]',
-    '[data-testid*="product-media"]', '[data-testid*="media"]', '[data-testid*="gallery"]',
-    '[data-testid*="carousel"]', '[class*="prod-hero"]', '[class*="product-media"]',
-    '[class*="ProductMedia"]', '[class*="gallery"]', '[class*="Gallery"]',
-    'main', '[role="main"]'
+  const selectors = platform === 'walmart' ? [
+    '[data-testid="vertical-carousel-container"]',
+    '[data-testid="vertical-hero-carousel"]',
+    '[data-testid="item-page-vertical-carousel-hero-image-button"]',
+    '[data-testid="hero-image-container"]',
+    '[data-testid="hero-image"]',
+    '[data-testid="media-thumbnail"]',
+    '[data-testid="zoom-image"]',
+    '[data-testid="zoom-panel"]',
+    '[data-automation-id="product-media"]',
+    '.prod-hero-image-carousel-container'
   ] : [
-    '[data-testid="product-image-container"]', '[data-testid*="item-page"]',
-    '[data-testid*="product-image"]', '[data-testid*="media"]', '[data-testid*="gallery"]',
-    '[class*="sc-image"]', '[class*="ImageViewer"]', '[class*="image-gallery"]',
-    '[class*="product-image"]', '[class*="ProductImage"]', '[class*="gallery"]',
-    'main', '[role="main"]'
+    '[data-testid="vertical-carousel-container"]',
+    '[data-testid="vertical-hero-carousel"]',
+    '[data-testid="item-page-vertical-carousel-hero-image-button"]',
+    '[data-testid="hero-image-container"]',
+    '[data-testid="hero-image"]',
+    '[data-testid="media-thumbnail"]',
+    '[data-testid="zoom-image"]',
+    '[data-testid="zoom-panel"]',
+    '[data-testid="product-image-container"]',
+    '[class*="ImageViewer"]',
+    '[class*="sc-image"]'
   ];
-  const scopes = [];
-  const primary = findProductGalleryContainer();
-  if (primary) scopes.push(primary);
-  gallerySelectors.forEach(selector => document.querySelectorAll(selector).forEach(el => scopes.push(el)));
-  if (!scopes.length) scopes.push(document);
+  const roots = new Set();
+  selectors.forEach(selector => document.querySelectorAll(selector).forEach(root => roots.add(root)));
+  const scopes = roots.size ? [...roots] : [findProductGalleryContainer() || document];
   const elements = new Set();
-  scopes.forEach(scope => scope.querySelectorAll('img, source, [data-image-url], [data-image-src], [data-zoom-image], [data-src], [data-lazy-src]').forEach(el => elements.add(el)));
+  scopes.forEach(scope => {
+    if (scope.matches?.('img, picture source, [data-image-url], [data-image-src], [data-zoom-image], [data-large-image], [data-src], [data-lazy-src], [data-original]')) elements.add(scope);
+    scope.querySelectorAll(
+      'img, picture source, [data-image-url], [data-image-src], [data-zoom-image], [data-large-image], [data-src], [data-lazy-src], [data-original]'
+    ).forEach(el => elements.add(el));
+  });
   elements.forEach(el => {
+    const context = `${el.getAttribute?.('data-testid') || ''} ${el.getAttribute?.('aria-label') || ''} ${el.className || ''}`;
+    if (/video|interactive-video|play-button/i.test(context) || el.closest?.('[data-testid*="video" i], [aria-label*="video" i], [class*="video" i]')) return;
     if (el.tagName === 'IMG' && isBadImageElement(el)) return;
-    ['data-old-hires', 'data-zoom-image', 'data-image-url', 'data-image-src', 'data-large-image', 'data-src', 'data-lazy-src', 'data-original', 'src'].forEach(attr => add(el.getAttribute(attr)));
-    addSrcset(el.getAttribute('srcset') || el.getAttribute('data-srcset'));
-    if (el.tagName === 'IMG' && el.naturalWidth >= 80) add(el.currentSrc || el.src);
+    ['data-old-hires', 'data-zoom-image', 'data-image-url', 'data-image-src', 'data-large-image', 'data-src', 'data-lazy-src', 'data-original', 'src'].forEach(attr => add(el.getAttribute?.(attr) || ''));
+    addSrcset(el.getAttribute?.('srcset') || el.getAttribute?.('data-srcset') || '');
+    if (el.tagName === 'IMG') add(el.currentSrc || el.src || '');
   });
   return out;
 }
@@ -1455,9 +1476,10 @@ function scrapeSamsClub() {
 
       const extractScAssets = (assets) => {
         if (!Array.isArray(assets) || assets.length === 0) return false;
-        if (!assets[0].largeImage && !assets[0].zoomImage) return false;
-        assets.forEach(a => addScImg(a.zoomImage || a.largeImage || ''));
-        return assets.length > 0;
+        const usable = assets.filter(a => a && (a.zoomImage || a.largeImage || a.imageUrl || a.image || a.url));
+        if (!usable.length) return false;
+        usable.forEach(a => addScImg(a.zoomImage || a.largeImage || a.imageUrl || a.image || a.url || ''));
+        return r.images.length > 0;
       };
 
       // Navigate the known Sam's Club product path first
@@ -2570,7 +2592,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const currentUrl  = location.href.toLowerCase();
 
   // Step 1: Must be a known shopping domain
-  const isProductDomain = BG_PLATFORM_KEYS.some(k => currentHost.includes(k));
+  const isProductDomain = BG_PLATFORM_KEYS.some(k => {
+    if (k.endsWith('.')) return currentHost.startsWith(k) || currentHost.includes('.' + k);
+    return currentHost === k || currentHost.endsWith('.' + k);
+  });
   if (!isProductDomain) return;
 
   // Step 2: Must be an actual product page Ã¢â‚¬â€ NOT search/category/home
@@ -2723,11 +2748,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     const btn = document.createElement('button');
     btn.className = 'zhunter-btn';
-    btn.innerHTML = '<span class="zhunter-icon">Ã¢Å¡Â¡</span><span>Add to Queue</span>';
+    btn.innerHTML = '<span class="zhunter-icon" aria-hidden="true">+</span><span>Add to Queue</span>';
 
     const toast = document.createElement('div');
     toast.className = 'zhunter-toast';
-    toast.innerHTML = '<span>Ã°Å¸Å¡â‚¬</span><span>Product added to ZHunter Queue!</span>';
+    toast.innerHTML = '<span aria-hidden="true">✓</span><span>Product added to ZHunter Queue!</span>';
 
     wrap.appendChild(btn);
     shadow.appendChild(wrap);
@@ -2738,13 +2763,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     // Check if already in queue
     try {
       console.log('[ZHunter] Checking initial queue status...');
-      chrome.runtime.sendMessage({ action: 'GET_BULK_QUEUE' }, (response) => {
+      chrome.runtime.sendMessage({ action: 'CHECK_BULK_QUEUE', url: normUrl }, (response) => {
         if (chrome.runtime.lastError) {
           console.warn('[ZHunter] Could not fetch queue (extension reloaded/disconnected):', chrome.runtime.lastError.message);
           return;
         }
-        const q = response?.queue || [];
-        if (q.some(item => item.url === normUrl)) {
+        if (response?.queued) {
           console.log('[ZHunter] Product is already queued.');
           markAdded();
         }
@@ -2755,7 +2779,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     function markAdded() {
       btn.classList.add('added');
-      btn.innerHTML = '<span class="zhunter-icon">Ã¢Å“â€œ</span><span>Queued</span>';
+      btn.innerHTML = '<span class="zhunter-icon" aria-hidden="true">✓</span><span>Queued</span>';
     }
 
     function showToast() {
@@ -2845,69 +2869,60 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!PRODUCT_PATH_PATTERNS.some(p => p.test(path) || p.test(href))) return;
 
   // Ã¢â€â‚¬Ã¢â€â‚¬ Image Collector Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-  function collectPageImages() {
-    const seen = new Set();
-    const imgs = [];
+  const IMAGE_CARD_CAP = 40;
 
+  function cardPlatformImages() {
+    try {
+      const normalizedHost = h.replace(/^www\./, '');
+      if (normalizedHost.includes('amazon.')) return dedupeImages(scrapeAmazon().images || []);
+      if (normalizedHost === 'walmart.com' || normalizedHost.endsWith('.walmart.com')) return dedupeImages(scrapeWalmart().images || []);
+      if (normalizedHost === 'samsclub.com' || normalizedHost.endsWith('.samsclub.com')) return dedupeImages(scrapeSamsClub().images || []);
+    } catch (_) {}
+    return [];
+  }
+
+  function collectPageImages() {
+    // The marketplace scrapers use verified gallery/state paths first. This
+    // keeps recommendation media out while recovering lazy/variant images.
+    const marketplaceImages = cardPlatformImages();
+    if (marketplaceImages.length) return marketplaceImages.slice(0, IMAGE_CARD_CAP);
+
+    const raw = [];
     const push = (url) => {
       if (!url || typeof url !== 'string') return;
       try {
         const abs = new URL(url, location.href).href;
-        if (seen.has(abs)) return;
-        if (/\.(svg|gif|ico|webp)(\?|$)/i.test(abs) && !/product|item|goods/i.test(abs)) return;
-        if (/logo|icon|badge|sprite|avatar|banner|placeholder/i.test(abs)) return;
-        seen.add(abs);
-        imgs.push(abs);
+        if (/\.(svg|ico)(\?|$)/i.test(abs)) return;
+        if (/logo|icon|badge|sprite|avatar|banner|placeholder|play[-_]?button/i.test(abs)) return;
+        raw.push(abs);
       } catch (_) {}
     };
-
-    // 1. OG image (most reliable first)
-    document.querySelectorAll('meta[property="og:image"], meta[name="og:image"]')
-      .forEach(m => push(m.content));
-
-    // 2. JSON-LD images
-    document.querySelectorAll('script[type="application/ld+json"]').forEach(s => {
-      try {
-        const d = JSON.parse(s.textContent);
-        const extract = o => {
-          if (!o) return;
-          if (Array.isArray(o)) { o.forEach(extract); return; }
-          if (typeof o === 'string') { push(o); return; }
-          if (o.image) extract(o.image);
-          if (o.url && /\.(jpe?g|png|webp)/i.test(o.url)) push(o.url);
-          if (o.contentUrl) push(o.contentUrl);
-        };
-        extract(d);
-      } catch (_) {}
-    });
-
-    // 3. Gallery / product-zone images
+    const addElement = (el) => {
+      if (!el || (el.tagName === 'IMG' && isBadImageElement(el))) return;
+      ['data-old-hires', 'data-zoom-image', 'data-image-url', 'data-image-src',
+       'data-large-image', 'data-src', 'data-lazy-src', 'data-original', 'src']
+        .forEach(attr => push(el.getAttribute?.(attr) || ''));
+      const srcset = el.getAttribute?.('srcset') || el.getAttribute?.('data-srcset') || '';
+      String(srcset).split(',').forEach(part => push(part.trim().split(/\s+/)[0] || ''));
+      if (el.tagName === 'IMG') push(el.currentSrc || el.src || '');
+    };
     const gallerySelectors = [
-      '[data-testid*="product-image"] img', '[data-testid*="hero"] img',
-      '.product-image img', '.product__images img', '.product-gallery img',
-      '#imageBlock img', '#altImages img', '.imgTagWrapper img',
-      '[class*="gallery"] img', '[class*="Gallery"] img',
-      '[class*="product"] img', '[class*="Product"] img',
-      '[class*="carousel"] img', '[class*="slider"] img',
-      'img[data-zoom-image]', 'img[data-large-src]',
-      'img[data-src*="product"]', 'img[data-original]',
-      '.swiper-slide img', '.slick-slide img'
+      '#landingImage, #imgTagWrapperId img, #altImages img, .a-button-thumbnail img, .imageThumbnail img',
+      '[data-testid="vertical-carousel-container"] img',
+      '[data-testid="vertical-hero-carousel"] img',
+      '[data-testid="item-page-vertical-carousel-hero-image-button"] img',
+      '[data-testid="media-thumbnail"] img, [data-testid="hero-image"] img',
+      '[data-testid="hero-image-container"] img, [data-testid="zoom-image"] img',
+      '[data-testid="zoom-panel"] img, [data-automation-id="product-media"] img',
+      '[class*="product-gallery"] img, [class*="ProductGallery"] img',
+      '[class*="product-image"] img, [class*="ProductImage"] img',
+      '[class*="carousel"] img, [class*="gallery"] img',
+      'img[data-zoom-image], img[data-image-url], img[data-image-src], img[data-lazy-src]'
     ];
-    document.querySelectorAll(gallerySelectors.join(', ')).forEach(img => {
-      const src = img.dataset.zoomImage || img.dataset.largeSrc ||
-                  img.dataset.original || img.dataset.src || img.src || '';
-      if (src && img.naturalWidth > 80 && img.naturalHeight > 80) push(src);
-    });
-
-    // 4. Amazon-specific hi-res
-    document.querySelectorAll('[data-a-dynamic-image]').forEach(el => {
-      try {
-        const map = JSON.parse(el.dataset.aDynamicImage || '{}');
-        Object.keys(map).forEach(push);
-      } catch (_) {}
-    });
-
-    return imgs.slice(0, 20);
+    const gallery = document.querySelectorAll(gallerySelectors.join(', '));
+    gallery.forEach(addElement);
+    if (!gallery.length) document.querySelectorAll('meta[property="og:image"], meta[name="og:image"]').forEach(m => push(m.content));
+    return dedupeImages(raw).slice(0, IMAGE_CARD_CAP);
   }
 
   // Ã¢â€â‚¬Ã¢â€â‚¬ Download helper Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
@@ -3282,19 +3297,36 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     });
 
     // Ã¢â€â‚¬Ã¢â€â‚¬ Load images (with delay for SPAs)
-    setTimeout(() => {
-      images = collectPageImages();
-      selected = new Set(images.map((_, i) => i)); // select all by default
-      renderGrid();
-      if (images.length === 0) {
-        // Retry once after 2s for slow SPAs
-        setTimeout(() => {
-          images = collectPageImages();
-          selected = new Set(images.map((_, i) => i));
-          renderGrid();
-        }, 2000);
+    let knownImages = new Set();
+    let refreshTimer = null;
+    const refreshImages = () => {
+      const next = collectPageImages();
+      if (!next.length && images.length) return;
+      const selectedUrls = new Set([...selected].map(index => images[index]).filter(Boolean));
+      const previousUrls = new Set(images);
+      images = next;
+      selected = new Set(images.map((url, index) => {
+        if (!previousUrls.size || selectedUrls.has(url) || !previousUrls.has(url)) return index;
+        return -1;
+      }).filter(index => index >= 0));
+      const changed = images.length !== knownImages.size || images.some(url => !knownImages.has(url));
+      if (changed || !knownImages.size) {
+        knownImages = new Set(images);
+        renderGrid();
       }
-    }, 1200);
+    };
+    const scheduleRefresh = () => {
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(refreshImages, 350);
+    };
+    setTimeout(refreshImages, 900);
+    [1800, 3200, 5200, 8000].forEach(delay => setTimeout(refreshImages, delay));
+    const galleryObserver = new MutationObserver(scheduleRefresh);
+    galleryObserver.observe(document.body, {
+      subtree: true, childList: true, attributes: true,
+      attributeFilter: ['src', 'srcset', 'data-src', 'data-lazy-src', 'data-image-url', 'data-image-src', 'data-zoom-image']
+    });
+    setTimeout(() => galleryObserver.disconnect(), 10000);
   }
 
   // Ã¢â€â‚¬Ã¢â€â‚¬ Kick off

@@ -1,5 +1,5 @@
 // ============================================================
-// ZHunter PRO v7.9.15 — Side Panel Controller
+// ZHunter PRO v7.10.1 — Side Panel Controller
 // Fixes: API key removed, async tag race fixed, video support,
 //        clipboard guard, Daraz/Shein scrapers, working AI models
 // ============================================================
@@ -876,8 +876,8 @@ function initCollectTab() {
     const title = titleInput?.value.trim();
     if (!title) { toast('Hunt or enter a product title first!', 'warn'); return; }
 
-    const apiKey = State.data.settings?.aiApiKey;
-    if (!apiKey) {
+    const hasApiKey = State.data.settings?.hasApiKey === true;
+    if (!hasApiKey) {
       toast('Add your OpenRouter API key in Settings first', 'warn');
       setTimeout(() => chrome.runtime.openOptionsPage(), 1500);
       return;
@@ -3003,13 +3003,8 @@ function initHuntPreviewModal() {
 
     const settings = State.data?.settings || {};
     const provider = settings.activeAiProvider || 'OpenRouter';
-    let apiKey = '';
-    if (provider === 'OpenRouter') apiKey = settings.openRouterApiKey || settings.aiApiKey;
-    else if (provider === 'Groq') apiKey = settings.groqApiKey;
-    else if (provider === 'Gemini') apiKey = settings.geminiApiKey;
-    else if (provider === 'OpenAI') apiKey = settings.openAiApiKey;
-
-    if (!apiKey) { toast('Add API key in Settings first.', 'warn'); return; }
+    const configuredProviders = Array.isArray(settings.configuredProviders) ? settings.configuredProviders : [];
+    if (!configuredProviders.includes(provider)) { toast('Add API key in Settings first.', 'warn'); return; }
 
     btn.disabled = true;
     btn.textContent = '⏳ Generating...';
@@ -3091,11 +3086,11 @@ function initHuntPreviewModal() {
       toast('Product saved! 🛍️ Images loading in background…', 'ok');
 
       // Background enrichment (base64 + AI)
-      const apiKeyForAi = State.data?.settings?.aiApiKey || '';
+      const hasApiKeyForAi = State.data?.settings?.hasApiKey === true;
       msg({
         action: 'ENRICH_LINK',
         linkId: fastRes.link.id,
-        runAi:  !!apiKeyForAi
+        runAi: hasApiKeyForAi
       }).catch(() => {});
 
     } finally {
@@ -3428,6 +3423,63 @@ function renderProductQueue() {
 }
 
 
+function buildQueueResearchWorkbook(allItems, folderById) {
+  const wb = XLSX.utils.book_new();
+  const cleanUrl = value => typeof value === 'string' && /^https?:/i.test(value) ? value : '';
+  const asRows = (headers, rows, sheetName) => {
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    ws['!autofilter'] = { ref: `A1:${XLSX.utils.encode_col(headers.length - 1)}${Math.max(1, rows.length + 1)}` };
+    ws['!views'] = [{ state: 'frozen', ySplit: 1, topLeftCell: 'A2', showGridLines: true }];
+    ws['!cols'] = headers.map(header => ({ wch: Math.min(52, Math.max(14, String(header).length + 4)) }));
+    const headerFill = { patternType: 'solid', fgColor: { rgb: '00B050' } };
+    headers.forEach((_, column) => {
+      const cell = ws[XLSX.utils.encode_cell({ r: 0, c: column })];
+      if (cell) cell.s = { fill: headerFill, font: { bold: true, color: { rgb: 'FFFFFF' } }, alignment: { horizontal: 'center', vertical: 'center' } };
+    });
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  };
+  const ordered = orderedProductQueueItems(Array.isArray(allItems) ? allItems : []);
+  const products = ordered.map(item => [
+    folderById.get(item.id) || 'Folder 01', item.title || '', item.url || '', item.platform || '',
+    item.price || '', item.status || 'queued', Array.isArray(item.images) ? item.images.length : 0,
+    Array.isArray(item.videos) ? item.videos.length : 0, Array.isArray(item.variants) ? item.variants.length : 0,
+    item.description || '', item.source || '', item.updatedAt || ''
+  ]);
+  asRows(['Folder Number', 'Product Title', 'Link', 'Platform', 'Sourcing Price', 'Status', 'Image Count', 'Video Count', 'Variant Count', 'Description', 'Source', 'Last Updated'], products, 'Products');
+
+  const media = [];
+  ordered.forEach(item => {
+    (Array.isArray(item.images) ? item.images : []).forEach((value, index) => media.push([
+      folderById.get(item.id) || 'Folder 01', item.title || '', item.url || '', 'Image', index + 1,
+      cleanUrl(typeof value === 'string' ? value : value?.url), item.status || 'queued'
+    ]));
+    (Array.isArray(item.videos) ? item.videos : []).forEach((value, index) => media.push([
+      folderById.get(item.id) || 'Folder 01', item.title || '', item.url || '', 'Video', index + 1,
+      cleanUrl(typeof value === 'string' ? value : value?.url), item.status || 'queued'
+    ]));
+  });
+  asRows(['Folder Number', 'Product Title', 'Product Link', 'Media Type', 'Position', 'Media URL', 'Status'], media, 'Media');
+
+  const costingHeaders = ['Folder Number', 'Product Title', 'Sourcing Price', 'Shipping Cost', 'Duties', 'Packaging', 'Selling Price', 'Fees %', 'Landed Cost', 'Gross Profit', 'Margin %', 'ROI %', 'Break-even Price'];
+  const costing = ordered.map((item, index) => {
+    const row = index + 2;
+    return [folderById.get(item.id) || 'Folder 01', item.title || '', item.price || '', '', '', '', '', '',
+      { f: `IF(C${row}="","",C${row}+D${row}+E${row}+F${row})`, v: '' },
+      { f: `IF(G${row}="","",G${row}-I${row}-(G${row}*H${row}/100))`, v: '' },
+      { f: `IFERROR(J${row}/G${row},"")`, v: '' },
+      { f: `IFERROR(J${row}/I${row},"")`, v: '' },
+      { f: `IFERROR(I${row}/(1-H${row}/100),"")`, v: '' }
+    ];
+  });
+  asRows(costingHeaders, costing, 'Costing');
+
+  const errors = ordered.filter(item => item.status !== 'complete').map(item => [
+    folderById.get(item.id) || 'Folder 01', item.title || '', item.url || '', item.status || 'queued', item.attempts || 0, item.error || ''
+  ]);
+  asRows(['Folder Number', 'Product Title', 'Link', 'Status', 'Attempts', 'Last Error'], errors, 'Errors');
+  return wb;
+}
+
 async function downloadProductQueueMasterZip() {
   const btn = $('productQueueMasterZipBtn');
   if (typeof JSZip === 'undefined' || typeof XLSX === 'undefined') {
@@ -3457,6 +3509,8 @@ async function downloadProductQueueMasterZip() {
     // one Product Sheet tab, green header, and exactly four columns.
     const xlsxBuf = XLSX.write(buildFinalProductSheetWorkbook(sheetRows), { type: 'array', bookType: 'xlsx', cellStyles: true });
     zip.file('product_sheet.xlsx', xlsxBuf);
+    const researchBuf = XLSX.write(buildQueueResearchWorkbook(allItems, folderById), { type: 'array', bookType: 'xlsx', cellStyles: true });
+    zip.file('research_workbook.xlsx', researchBuf);
 
     const failedMedia = [];
     const summary = [
@@ -3659,7 +3713,7 @@ function buildFinalProductSheetWorkbook(sourceRows) {
   const values = rows.map(row => headers.map(header => row[header]));
   const ws = XLSX.utils.aoa_to_sheet([headers, ...values]);
   const lastRow = values.length + 1;
-  const green = '217346';
+  const green = '00B050';
   const stripe = 'EAF3F8';
   const headerBorder = {
     top: { style: 'thin', color: { rgb: '007A36' } },
@@ -3832,42 +3886,8 @@ const BATCHES_KEY = 'zhunterMasterBatches';
 
 // ── Init ─────────────────────────────────────────────────────
 function initBulkTab() {
-  $('bulkViewTabsBtn')?.addEventListener('click',   () => switchBulkView('tabs'));
-  $('bulkViewMasterBtn')?.addEventListener('click', () => switchBulkView('master'));
-  $('bulkRefreshTabsBtn')?.addEventListener('click', loadBulkTabs);
-  $('bulkSelectAllBtn')?.addEventListener('click',   () => toggleAllBulkTabs(true));
-  $('bulkDeselectAllBtn')?.addEventListener('click', () => toggleAllBulkTabs(false));
-  $('bulkResumeBtn')?.addEventListener('click',  resumePendingHunt);
-  $('bulkDiscardBtn')?.addEventListener('click', discardPendingHunt);
-  $('bulkFailedToggle')?.addEventListener('click', toggleFailedList);
-
-  $('bulkHuntStartBtn')?.addEventListener('click', () => startBulkHunt());
-
-  // Auto-close toggle
-  const autoCloseToggle = $('bulkAutoCloseToggle');
-  if (autoCloseToggle) {
-    autoCloseToggle.checked = BulkState.AUTO_CLOSE_TABS;
-    autoCloseToggle.addEventListener('change', () => {
-      BulkState.AUTO_CLOSE_TABS = autoCloseToggle.checked;
-    });
-  }
-
-  // Master sheet buttons
-  $('masterDlXlsxBtn')?.addEventListener('click', () => downloadMasterSheet('xlsx'));
-  $('masterDlHtmlBtn')?.addEventListener('click', () => downloadMasterSheet('html'));
-  $('masterDlPdfBtn')?.addEventListener('click',  () => downloadMasterSheet('pdf'));
-  $('masterResetBtn')?.addEventListener('click',  resetMasterSheet);
-
-  // Master sheet — quick selection actions
-  $('masterSelectAllBtn')?.addEventListener('click',     masterSelectAll);
-  $('masterSelectFailedBtn')?.addEventListener('click',  () => masterSelectByStatus('fail'));
-  $('masterSelectPartialBtn')?.addEventListener('click', () => masterSelectByStatus('partial'));
-  $('masterDeselectAllBtn')?.addEventListener('click',   masterDeselectAll);
-  $('masterBulkDeleteBtn')?.addEventListener('click',    bulkDeleteMasterRows);
-  $('masterBulkCancelBtn')?.addEventListener('click',    masterDeselectAll);
-
-  // Bulk-tab inline column settings toggle
-  $('bulkColumnsToggleBtn')?.addEventListener('click', toggleBulkColumnsPanel);
+  // Product Queue is the only bulk workflow in the side panel. The old tab and
+  // master-sheet controls remain in the popup for backwards compatibility.
 
   // Progress modal buttons
   $('bulkPauseBtn')?.addEventListener('click',        toggleBulkPause);
@@ -3884,14 +3904,16 @@ function initBulkTab() {
     downloadPdfCatalog(rows, 'Bulk Hunt Catalog');
   });
 
-  // ── Queue view buttons
-  $('bulkViewQueueBtn')?.addEventListener('click', () => switchBulkView('queue'));
+  // ── Product Queue buttons
   $('queueAddBtn')?.addEventListener('click', onQueueAddUrl);
   $('queueAddInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') onQueueAddUrl(); });
   $('queueSelectAllBtn')?.addEventListener('click',   () => toggleAllQueue(true));
   $('queueDeselectAllBtn')?.addEventListener('click', () => toggleAllQueue(false));
   $('queueClearDoneBtn')?.addEventListener('click',   clearHuntedQueueItems);
   $('queueClearAllBtn')?.addEventListener('click',    clearAllQueue);
+  $('queueRetryProblemsBtn')?.addEventListener('click', retryProblemQueueItems);
+  $('queueSearchInput')?.addEventListener('input', e => { QueueState.search = e.target.value || ''; renderBulkQueueList(); });
+  $('queueStatusFilter')?.addEventListener('change', e => { QueueState.statusFilter = e.target.value || 'all'; renderBulkQueueList(); });
   $('bulkQueueHuntBtn')?.addEventListener('click',    startQueueHunt);
 
   // Auto-capture toggle — persist setting to storage
@@ -3908,17 +3930,12 @@ function initBulkTab() {
     if (m?.action === 'BULK_QUEUE_UPDATED' && BulkState.view === 'queue') loadBulkQueue();
   });
 
-  // Auto-refresh tab list when Bulk tab is opened
-  document.querySelector('[data-tab="bulk"]')?.addEventListener('click', () => {
-    if (BulkState.view === 'tabs')        loadBulkTabs();
-    else if (BulkState.view === 'queue') loadBulkQueue();
-    else updateMasterStats();
-  });
+  // Refresh the queue whenever the Bulk tab is opened.
+  document.querySelector('[data-tab="bulk"]')?.addEventListener('click', loadBulkQueue);
 
   // Initial load
-  loadBulkTabs();
+  switchBulkView('queue');
   loadBulkQueue();
-  updateMasterStats();
   checkPendingHunt(); // Show resume banner if a hunt was interrupted
   // Sync auto-capture toggle from settings
   msg({ action: 'GET_DATA' }).then(d => {
@@ -3928,29 +3945,22 @@ function initBulkTab() {
   });
 }
 
-function switchBulkView(view) {
-  BulkState.view = view;
-  $('bulkViewTabsBtn')?.classList.toggle('active',   view === 'tabs');
-  $('bulkViewQueueBtn')?.classList.toggle('active',  view === 'queue');
-  $('bulkViewMasterBtn')?.classList.toggle('active', view === 'master');
-  $('bulkTabsView')?.classList.toggle('active',   view === 'tabs');
-  $('bulkQueueView')?.classList.toggle('active',  view === 'queue');
-  $('bulkMasterView')?.classList.toggle('active', view === 'master');
-  if (view === 'tabs')   loadBulkTabs();
-  if (view === 'queue')  loadBulkQueue();
-  if (view === 'master') updateMasterStats();
+function switchBulkView(view = 'queue') {
+  BulkState.view = 'queue';
+  $('bulkQueueView')?.classList.add('active');
+  if (view === 'queue') loadBulkQueue();
 }
 
 // ══════════════════════════════════════════════════════════════
 // BULK QUEUE — persistent URL queue + sequential hunt
 // ══════════════════════════════════════════════════════════════
 
-const QueueState = { items: [] };
+const QueueState = { items: [], search: '', statusFilter: 'all' };
 
 async function loadBulkQueue() {
   try {
     const res = await msg({ action: 'GET_BULK_QUEUE' });
-    QueueState.items = res?.queue || [];
+    QueueState.items = Array.isArray(res?.queue) ? res.queue : [];
     renderBulkQueueList();
   } catch { toast('Failed to load queue', 'err'); }
 }
@@ -3959,15 +3969,25 @@ function renderBulkQueueList() {
   const list = $('bulkQueueList');
   if (!list) return;
   const items = QueueState.items;
-  if (items.length === 0) {
-    list.innerHTML = `<div class="bulk-empty"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 9h6M9 12h6M9 15h4"/></svg><p>Queue is empty — browse product pages<br>or paste a URL above to add them.</p></div>`;
+  const query = QueueState.search.trim().toLowerCase();
+  const filtered = items.filter(item => {
+    const status = item.status || (item.hunted ? 'complete' : 'queued');
+    const matchesStatus = QueueState.statusFilter === 'all' || status === QueueState.statusFilter;
+    const haystack = `${item.title || ''} ${item.url || ''} ${item.platform || ''}`.toLowerCase();
+    return matchesStatus && (!query || haystack.includes(query));
+  });
+  if (items.length === 0 || filtered.length === 0) {
+    list.innerHTML = items.length === 0
+      ? `<div class="bulk-empty"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 9h6M9 12h6M9 15h4"/></svg><p>Queue is empty — browse product pages<br>or paste a URL above to add them.</p></div>`
+      : `<div class="bulk-empty"><p>No queue items match the current filter.</p></div>`;
     updateQueueSummary();
     return;
   }
   list.innerHTML = '';
-  items.forEach(item => {
+  filtered.forEach(item => {
     const isChecked = !!item.checked;
     const isHunted  = !!item.hunted;
+    const status = item.status || (isHunted ? 'complete' : 'queued');
     const platLabel = item.platform
       ? `<span class="bulk-tab-platform">${esc(item.platform.substring(0,3).toUpperCase())}</span>`
       : `<span class="bulk-tab-platform unknown">?</span>`;
@@ -3976,7 +3996,9 @@ function renderBulkQueueList() {
     const row = document.createElement('div');
     row.className = 'bulk-tab-row' + (isChecked ? ' checked' : '') + (isHunted ? ' duplicate' : '');
     row.dataset.queueId = item.id;
-    row.innerHTML = `<div class="bulk-tab-checkbox"></div>${platLabel}<div class="bulk-tab-info"><div class="bulk-tab-platform-lbl">${esc(item.title ? trunc(item.title,50) : shortUrl)}${huntedBadge}</div><div class="bulk-tab-title" style="opacity:.55;font-size:10px">${esc(shortUrl)}</div></div><button class="queue-remove-btn" data-id="${esc(item.id)}" title="Remove from queue" style="margin-left:auto;flex-shrink:0;background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:14px;line-height:1;padding:2px 4px">×</button>`;
+    const retryButton = (status === 'needs_retry' || status === 'error')
+      ? `<button class="queue-retry-btn" data-id="${esc(item.id)}" title="Retry this product" style="margin-left:auto;background:none;border:1px solid var(--border);border-radius:5px;cursor:pointer;color:var(--text-muted);font-size:10px;padding:3px 5px">Retry</button>` : '';
+    row.innerHTML = `<div class="bulk-tab-checkbox"></div>${platLabel}<div class="bulk-tab-info"><div class="bulk-tab-platform-lbl">${esc(item.title ? trunc(item.title,50) : shortUrl)}${huntedBadge}</div><div class="bulk-tab-title" style="opacity:.55;font-size:10px">${esc(shortUrl)} · ${esc(status)}</div></div>${retryButton}<button class="queue-remove-btn" data-id="${esc(item.id)}" title="Remove from queue" style="margin-left:auto;flex-shrink:0;background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:14px;line-height:1;padding:2px 4px">×</button>`;
     row.addEventListener('click', e => {
       if (e.target.closest('.queue-remove-btn')) return;
       item.checked = !item.checked;
@@ -3986,6 +4008,10 @@ function renderBulkQueueList() {
     row.querySelector('.queue-remove-btn').addEventListener('click', e => {
       e.stopPropagation();
       removeQueueItem(item.id);
+    });
+    row.querySelector('.queue-retry-btn')?.addEventListener('click', e => {
+      e.stopPropagation();
+      retrySingleQueueItem(item.id);
     });
     list.appendChild(row);
   });
@@ -4025,6 +4051,34 @@ function clearHuntedQueueItems() {
 
 function clearAllQueue() {
   QueueState.items = []; saveBulkQueue(); renderBulkQueueList();
+}
+
+function retrySingleQueueItem(id) {
+  const item = QueueState.items.find(entry => entry.id === id);
+  if (!item) return;
+  item.hunted = false;
+  item.checked = true;
+  item.status = 'queued';
+  item.attempts = 0;
+  item.error = '';
+  saveBulkQueue();
+  renderBulkQueueList();
+  toast('Product queued for retry', 'ok');
+}
+
+function retryProblemQueueItems() {
+  QueueState.items.forEach(item => {
+    const status = item.status || (item.hunted ? 'complete' : 'queued');
+    if (status === 'needs_retry' || status === 'error') {
+      item.hunted = false;
+      item.checked = true;
+      item.status = 'queued';
+      item.attempts = 0;
+      item.error = '';
+    }
+  });
+  saveBulkQueue();
+  renderBulkQueueList();
 }
 
 function onQueueAddUrl() {
@@ -4088,7 +4142,11 @@ async function scrapeQueueItem(queueItem) {
   BulkState.results.push(resultItem);
   if (status !== 'fail') BulkState.pendingFlush.push(resultItem);
   const qi = QueueState.items.find(i => i.id === fakeId);
-  if (qi) qi.hunted = true;
+  if (qi) {
+    qi.hunted = true;
+    qi.status = status === 'fail' ? 'needs_retry' : 'complete';
+    qi.error = resultItem.error;
+  }
   setBulkRowStatus(fakeId, status, { images: 0, error: resultItem.error });
   updateBulkProgressBar();
 }

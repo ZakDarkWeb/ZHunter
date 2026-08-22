@@ -1,5 +1,5 @@
 // ============================================================
-// ZHunter PRO v7.9.15 - Background Service Worker
+// ZHunter PRO v7.10.0 - Background Service Worker
 // Handles storage operations, messaging, content script orchestration, and AI generation
 // ============================================================
 'use strict';
@@ -34,6 +34,19 @@ function bgDetectPlatform(url) {
 
 const IMG_CAP = 15;
 const VID_CAP = 12;
+
+// Secrets are kept in local storage for the worker only. They are never returned
+// by GET_DATA/GET_SETTINGS or synced to the cloud payload.
+const SECRET_SETTING_KEYS = new Set([
+  'aiApiKey', 'openRouterApiKey', 'groqApiKey', 'geminiApiKey', 'openAiApiKey'
+]);
+const PUBLIC_SETTING_KEYS = new Set([
+  'autoCategory', 'duplicateCheck', 'badgeEnabled', 'saveToCurrentFolder',
+  'lastFolder', 'activeAiProvider', 'bulkFilenamePrefix', 'autoSkipDuplicates', 'cloudSyncEnabled',
+  'imageFormat', 'imageRatio', 'imageBg', 'imageMinSize', 'imageMax5MB',
+  'bulkQueueAutoCapture', 'bulkSheetColumns', 'customBulkColumns',
+  'productSheetColumns', 'customProductColumns', 'migratedToOriginal_2'
+]);
 
 const FETCH_CONCURRENCY = 8;   // was 16 — moderate concurrency to prevent network congestion
 const FETCH_TIMEOUT_MS  = 12000; // was 5000 — safer timeout to prevent image download failures
@@ -159,7 +172,9 @@ async function clearIndexedDBImages() {
 const _FS_PROJECT = 'zhunter-66d4d';
 const _FS_API_KEY = 'AIzaSyC8X3tV3oKnZnq2oiJ7VSUAp8M8ei_FyiM';
 const _FS_BASE    = `https://firestore.googleapis.com/v1/projects/${_FS_PROJECT}/databases/(default)/documents`;
-
+// Cloud sync is intentionally disabled until authenticated Firebase rules and
+// conflict-safe authorization are deployed.
+const CLOUD_SYNC_AVAILABLE = false;
 let _cloudUserId = null;  // cached user/device ID
 let _cloudReady  = false; // true after first successful sync
 let _syncPending = false; // debounce flag
@@ -220,7 +235,7 @@ async function _syncToCloud(data) {
       folders:    data.folders  || [],
       tags:       data.tags     || [],
       history:    (data.history || []).slice(0, 100),
-      settings:   data.settings || {},
+      settings:   getPublicSettings(data.settings || {}),
       lastSynced: new Date().toISOString(),
       version:    chrome.runtime.getManifest().version
     });
@@ -352,6 +367,42 @@ const DEFAULT_DATA = {
   }
 };
 
+function getPublicSettings(settings = {}) {
+  const publicSettings = {};
+  for (const key of PUBLIC_SETTING_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(settings, key)) publicSettings[key] = settings[key];
+  }
+  publicSettings.hasApiKey = [...SECRET_SETTING_KEYS].some(key => typeof settings[key] === 'string' && settings[key].trim());
+  publicSettings.configuredProviders = [
+    ['OpenRouter', settings.openRouterApiKey || settings.aiApiKey],
+    ['Groq', settings.groqApiKey],
+    ['Gemini', settings.geminiApiKey],
+    ['OpenAI', settings.openAiApiKey]
+  ].filter(([, value]) => typeof value === 'string' && value.trim()).map(([provider]) => provider);
+  return publicSettings;
+}
+
+function sanitizeSettingsPatch(patch) {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return {};
+  const clean = {};
+  for (const [key, value] of Object.entries(patch)) {
+    if (!PUBLIC_SETTING_KEYS.has(key) && !SECRET_SETTING_KEYS.has(key)) continue;
+    if (SECRET_SETTING_KEYS.has(key)) {
+      if (typeof value === 'string' && value.length <= 500) clean[key] = value.trim();
+      continue;
+    }
+    if (key === 'cloudSyncEnabled' && !CLOUD_SYNC_AVAILABLE) {
+      clean[key] = false;
+      continue;
+    }
+    if (typeof value === 'string') clean[key] = value.slice(0, 5000);
+    else if (typeof value === 'boolean' || typeof value === 'number') clean[key] = value;
+    else if (Array.isArray(value)) clean[key] = value.slice(0, 200);
+    else if (value && typeof value === 'object') clean[key] = { ...value };
+  }
+  return clean;
+}
+
 // ── Storage helpers ──────────────────────────────────────────
 async function getData() {
   try {
@@ -377,7 +428,7 @@ async function getData() {
       settings.imageBg = 'original';
       settings.imageMinSize = 0;
       settings.migratedToOriginal_2 = true;
-      chrome.storage.local.set({ [STORAGE_KEY]: { ...stored, settings } });
+      await chrome.storage.local.set({ [STORAGE_KEY]: { ...stored, settings } });
     }
 
     return {
@@ -397,8 +448,12 @@ async function saveData(data) {
     await chrome.storage.local.set({ [STORAGE_KEY]: data });
     await updateBadge(data.links.length, data.settings.badgeEnabled);
     // Cloud sync is opt-in. The normal free workflow remains local-only.
-    if (data.settings?.cloudSyncEnabled === true) _debouncedSync(data);
-  } catch (_) {}
+    if (data.settings?.cloudSyncEnabled === true && CLOUD_SYNC_AVAILABLE) _debouncedSync(data);
+    return true;
+  } catch (err) {
+    console.warn('[ZHunter] Local storage write failed:', err?.message || 'storage_error');
+    return false;
+  }
 }
 
 // ── NO-TAB PRODUCT QUEUE ──────────────────────────────────────
@@ -408,9 +463,12 @@ function normalizeQueueUrl(raw) {
   try {
     const u = new URL(String(raw || '').trim());
     u.hash = '';
+    u.hostname = u.hostname.toLowerCase();
+    if ((u.protocol === 'https:' && u.port === '443') || (u.protocol === 'http:' && u.port === '80')) u.port = '';
     for (const key of [...u.searchParams.keys()]) {
       if (/^(utm_|gclid$|fbclid$|msclkid$|ref$)/i.test(key)) u.searchParams.delete(key);
     }
+    u.searchParams.sort();
     return u.href;
   } catch (_) { return ''; }
 }
@@ -908,6 +966,25 @@ function isSupportedProductUrl(str) {
   } catch (_) { return false; }
 }
 
+function sanitizeBulkQueueItem(item) {
+  if (!item || typeof item !== 'object') return null;
+  const url = normalizeQueueUrl(item.url);
+  if (!url || !isSupportedProductUrl(url)) return null;
+  const status = ['queued', 'complete', 'needs_retry', 'error', 'fail', 'partial'].includes(item.status) ? item.status : (item.hunted ? 'complete' : 'queued');
+  return {
+    id: typeof item.id === 'string' && item.id.length <= 100 ? item.id : `q_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    url,
+    title: sanitizeText(item.title || url).slice(0, 500),
+    platform: sanitizeText(item.platform || bgDetectPlatform(url)).slice(0, 80),
+    addedAt: Number.isFinite(item.addedAt) ? item.addedAt : Date.now(),
+    checked: item.checked !== false,
+    hunted: item.hunted === true,
+    status,
+    attempts: Number.isFinite(item.attempts) ? Math.max(0, Math.min(20, Math.floor(item.attempts))) : 0,
+    error: sanitizeText(item.error || '').slice(0, 500)
+  };
+}
+
 function sanitizeText(str) {
   return String(str || '').slice(0, 5000).replace(/<[^>]*>/g, '');
 }
@@ -1226,8 +1303,9 @@ async function addLink({
   if (!url || !isValidURL(url)) return { success: false, reason: 'invalid_url' };
 
   const data = await getData();
+  const normalizedUrl = normalizeQueueUrl(url);
   if (data.settings.duplicateCheck) {
-    const dup = data.links.find(l => l.url === url);
+    const dup = data.links.find(l => normalizeQueueUrl(l.url) === normalizedUrl);
     if (dup) return { success: false, reason: 'duplicate', existingId: dup.id };
   }
 
@@ -1371,24 +1449,53 @@ async function removeLink(id) {
   return { success: true };
 }
 
+function sanitizeLinkUpdates(updates) {
+  if (!updates || typeof updates !== 'object' || Array.isArray(updates)) return {};
+  const clean = {};
+  const allowed = new Set([
+    'url', 'title', 'category', 'folder', 'tags', 'notes', 'images', 'imageUrls',
+    'price', 'videoUrl', 'videos', 'visited', 'visitCount', 'enrichmentStatus'
+  ]);
+  for (const [key, value] of Object.entries(updates)) {
+    if (!allowed.has(key)) continue;
+    if (['title', 'category', 'notes', 'price', 'enrichmentStatus'].includes(key)) {
+      if (typeof value === 'string') clean[key] = sanitizeText(value);
+      continue;
+    }
+    if (key === 'url') {
+      if (typeof value === 'string' && isValidURL(value)) clean[key] = value;
+      continue;
+    }
+    if (key === 'folder' || key === 'videoUrl') {
+      if (typeof value === 'string' && value.length <= 2000) clean[key] = key === 'videoUrl' && value && !isValidURL(value) ? '' : value;
+      continue;
+    }
+    if (key === 'tags') {
+      if (Array.isArray(value)) clean[key] = value.map(v => sanitizeText(v)).filter(Boolean).slice(0, 15);
+      continue;
+    }
+    if (key === 'images' || key === 'imageUrls' || key === 'videos') {
+      if (Array.isArray(value)) clean[key] = value.filter(v => typeof v === 'string' && isValidURL(v)).slice(0, key === 'videos' ? VID_CAP : IMG_CAP);
+      continue;
+    }
+    if (key === 'visited') {
+      if (typeof value === 'boolean') clean[key] = value;
+      continue;
+    }
+    if (key === 'visitCount') {
+      if (Number.isFinite(value)) clean[key] = Math.max(0, Math.min(1000000, Math.floor(value)));
+    }
+  }
+  return clean;
+}
+
 async function updateLink(id, updates) {
   const data = await getData();
+  updates = sanitizeLinkUpdates(updates);
   const idx = data.links.findIndex(l => l.id === id);
   if (idx === -1) return { success: false, reason: 'not_found' };
 
   if (updates.folder && !data.folders.includes(updates.folder)) updates.folder = data.links[idx].folder;
-  if (updates.images) {
-    updates.images = Array.isArray(updates.images)
-      ? updates.images.filter(i => typeof i === 'string' && isValidURL(i)).slice(0, IMG_CAP) : [];
-  }
-  if (updates.videos) {
-    updates.videos = Array.isArray(updates.videos)
-      ? updates.videos.filter(v => typeof v === 'string' && v.length > 0).slice(0, VID_CAP) : [];
-  }
-  if (updates.title) updates.title = sanitizeText(updates.title);
-  if (updates.notes) updates.notes = sanitizeText(updates.notes);
-  if (updates.price) updates.price = sanitizeText(updates.price);
-  if (updates.videoUrl !== undefined) updates.videoUrl = typeof updates.videoUrl === 'string' ? updates.videoUrl : '';
 
   data.links[idx] = { ...data.links[idx], ...updates, dateModified: new Date().toISOString() };
   await saveData(data);
@@ -1463,7 +1570,7 @@ async function saveAllTabs(folder = 'General', tags = []) {
 
   for (const tab of tabs) {
     if (!tab.url || !isValidURL(tab.url) || tab.url.startsWith('chrome://')) continue;
-    if (data.settings.duplicateCheck && data.links.some(l => l.url === tab.url)) {
+    if (data.settings.duplicateCheck && data.links.some(l => normalizeQueueUrl(l.url) === normalizeQueueUrl(tab.url))) {
       results.push({ url: tab.url, success: false, reason: 'duplicate' });
       continue;
     }
@@ -1590,7 +1697,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 // requests from the small set of actions allowed to page content scripts.
 const CONTENT_SCRIPT_ACTIONS = new Set([
   'ADD_PRODUCT_QUEUE', 'DOWNLOAD_PAGE_IMAGES', 'FETCH_BASE64',
-  'FETCH_BASE64_BATCH', 'GET_PENDING_IMAGE_HUNT'
+  'FETCH_BASE64_BATCH', 'GET_PENDING_IMAGE_HUNT', 'CHECK_BULK_QUEUE',
+  'ADD_TO_BULK_QUEUE'
 ]);
 
 function isAuthorizedMessage(msg, sender) {
@@ -1620,7 +1728,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 async function handleMessage(msg, sender) {
   switch (msg.action) {
     // ── Read-only / non-storage actions (no lock needed) ─────
-    case 'GET_DATA':           return await getData();
+    case 'GET_DATA': {
+      const data = await getData();
+      return { ...data, settings: getPublicSettings(data.settings) };
+    }
     case 'GET_LINK_IMAGES':    return { success: true, images: await getImagesFromIndexedDB(msg.id) };
     case 'START_KEEPALIVE':    startKeepAlive(); return { success: true };
     case 'STOP_KEEPALIVE':     stopKeepAlive();  return { success: true };
@@ -1679,9 +1790,16 @@ async function handleMessage(msg, sender) {
     // Background always reads the key directly from secure storage.
     case 'GENERATE_AI': {
       const _aiData = await getData();
-      return await generateAiDescription(msg.title, _aiData.settings.aiApiKey, {
+      const _provider = msg.provider || 'OpenRouter';
+      const _providerKeys = {
+        OpenRouter: _aiData.settings.openRouterApiKey || _aiData.settings.aiApiKey,
+        Groq: _aiData.settings.groqApiKey,
+        Gemini: _aiData.settings.geminiApiKey,
+        OpenAI: _aiData.settings.openAiApiKey
+      };
+      return await generateAiDescription(msg.title, _providerKeys[_provider] || _aiData.settings.aiApiKey, {
         existingNotes: msg.existingNotes || '',
-        provider: msg.provider || 'OpenRouter'
+        provider: _provider
       });
     }
 
@@ -1697,7 +1815,7 @@ async function handleMessage(msg, sender) {
     }
     case 'GET_SETTINGS': {
       const d = await getData();
-      return { success: true, settings: d.settings };
+      return { success: true, settings: getPublicSettings(d.settings) };
     }
     case 'GET_PRODUCT_QUEUE':
       return { success: true, queue: await getProductQueue() };
@@ -1791,9 +1909,10 @@ async function handleMessage(msg, sender) {
     });
     case 'UPDATE_SETTINGS':    return await withWriteLock(async () => {
       const data = await getData();
-      data.settings = { ...data.settings, ...(msg.settings || {}) };
+      const patch = sanitizeSettingsPatch(msg.settings);
+      data.settings = { ...data.settings, ...patch };
       await saveData(data);
-      return { success: true, settings: data.settings };
+      return { success: true, settings: getPublicSettings(data.settings) };
     });
     case 'LOG_ACTION':         return await withWriteLock(async () => {
       const data = await getData();
@@ -1845,9 +1964,10 @@ async function handleMessage(msg, sender) {
 
     // ── ☁️ Cloud Sync Actions ────────────────────────────────
     case 'CLOUD_SYNC_STATUS': {
-      return await _getCloudStatus();
+      return { enabled: false, available: false, ready: false, type: 'disabled', label: 'Cloud sync unavailable until secure sign-in is enabled' };
     }
     case 'LOAD_FROM_CLOUD': {
+      if (!CLOUD_SYNC_AVAILABLE) return { success: false, error: 'cloud_sync_disabled_until_authentication' };
       // Fetch latest data from Firestore and merge into local storage
       const cloudResult = await _loadFromCloud();
       if (!cloudResult.success) return cloudResult;
@@ -1880,6 +2000,7 @@ async function handleMessage(msg, sender) {
       return { success: true };
     }
     case 'FORCE_CLOUD_SYNC': {
+      if (!CLOUD_SYNC_AVAILABLE) return { success: false, error: 'cloud_sync_disabled_until_authentication' };
       // Immediately push local data to cloud (used by sync button)
       const data = await getData();
       const ok   = await _syncToCloud(data);
@@ -1889,20 +2010,44 @@ async function handleMessage(msg, sender) {
     // ── Bulk Queue CRUD ─────────────────────────────────────────
     case 'GET_BULK_QUEUE': {
       const res = await chrome.storage.local.get(BULK_QUEUE_KEY);
-      return { success: true, queue: res[BULK_QUEUE_KEY] || [] };
+      const rawQueue = Array.isArray(res[BULK_QUEUE_KEY]) ? res[BULK_QUEUE_KEY] : [];
+      const queue = [];
+      const seen = new Set();
+      rawQueue.slice(0, 2000).forEach(rawItem => {
+        const item = sanitizeBulkQueueItem(rawItem);
+        if (item && !seen.has(item.url)) { seen.add(item.url); queue.push(item); }
+      });
+      return { success: true, queue };
+    }
+    case 'CHECK_BULK_QUEUE': {
+      const normUrl = normalizeQueueUrl(msg.url || sender?.tab?.url || '');
+      const res = await chrome.storage.local.get(BULK_QUEUE_KEY);
+      const queue = Array.isArray(res[BULK_QUEUE_KEY]) ? res[BULK_QUEUE_KEY] : [];
+      return { success: true, queued: !!normUrl && queue.some(item => normalizeQueueUrl(item?.url) === normUrl) };
     }
     case 'ADD_TO_BULK_QUEUE': {
-      // Manual add from popup paste-URL bar
+      const normUrl = normalizeQueueUrl(msg.url || sender?.tab?.url || '');
+      if (!normUrl) return { success: false, reason: 'invalid_url' };
+      if (!isSupportedProductUrl(normUrl)) return { success: false, reason: 'unsupported_url' };
+      if (sender?.tab?.url && normalizeQueueUrl(sender.tab.url) !== normUrl) return { success: false, reason: 'tab_url_mismatch' };
       const res2 = await chrome.storage.local.get(BULK_QUEUE_KEY);
-      const q = res2[BULK_QUEUE_KEY] || [];
-      const normUrl = (msg.url || '').split('#')[0].trim();
-      if (!normUrl) return { success: false, reason: 'empty_url' };
-      if (q.some(i => i.url === normUrl)) return { success: false, reason: 'duplicate' };
-      const newItem = { id: `q_${Date.now()}_${Math.random().toString(36).slice(2,6)}`, url: normUrl, title: msg.title || normUrl, platform: msg.platform || null, addedAt: Date.now(), checked: true };
+      const q = Array.isArray(res2[BULK_QUEUE_KEY]) ? res2[BULK_QUEUE_KEY] : [];
+      if (q.some(i => normalizeQueueUrl(i?.url) === normUrl)) return { success: false, reason: 'duplicate' };
+      const newItem = {
+        id: `q_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+        url: normUrl,
+        title: sanitizeText(msg.title || normUrl),
+        platform: bgDetectPlatform(normUrl),
+        addedAt: Date.now(),
+        checked: true,
+        status: 'queued',
+        attempts: 0,
+        error: ''
+      };
       q.push(newItem);
-      await chrome.storage.local.set({ [BULK_QUEUE_KEY]: q });
+      await chrome.storage.local.set({ [BULK_QUEUE_KEY]: q.slice(0, 2000) });
       broadcastMessage({ action: 'BULK_QUEUE_UPDATED', item: newItem });
-      return { success: true };
+      return { success: true, item: newItem };
     }
     case 'REMOVE_FROM_BULK_QUEUE': {
       const res3 = await chrome.storage.local.get(BULK_QUEUE_KEY);
@@ -1911,10 +2056,18 @@ async function handleMessage(msg, sender) {
       return { success: true };
     }
     case 'UPDATE_BULK_QUEUE': {
-      // Full replace — popup sends updated array (check/uncheck, reorder)
-      if (!Array.isArray(msg.queue)) return { success: false };
-      await chrome.storage.local.set({ [BULK_QUEUE_KEY]: msg.queue });
-      return { success: true };
+      // Full replace — popup sends updated array (check/uncheck, reorder).
+      if (!Array.isArray(msg.queue)) return { success: false, reason: 'invalid_queue' };
+      const cleanQueue = [];
+      const seen = new Set();
+      for (const rawItem of msg.queue.slice(0, 2000)) {
+        const item = sanitizeBulkQueueItem(rawItem);
+        if (!item || seen.has(item.url)) continue;
+        seen.add(item.url);
+        cleanQueue.push(item);
+      }
+      await chrome.storage.local.set({ [BULK_QUEUE_KEY]: cleanQueue });
+      return { success: true, count: cleanQueue.length };
     }
     case 'CLEAR_BULK_QUEUE': {
       await chrome.storage.local.set({ [BULK_QUEUE_KEY]: [] });

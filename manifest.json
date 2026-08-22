@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ZHunter PRO",
-  "version": "7.9.15",
+  "version": "7.10.1",
   "description": "Cyberpunk product hunter with bulk multi-tab hunting, customizable XLSX/CSV/HTML exports with hyperlinks and Excel formulas, master sheet with quick re-hunt and bulk delete, smart image upgrades for Amazon/Walmart/Sam's/Faire.",
   "author": "ZHunter",
   "permissions": [

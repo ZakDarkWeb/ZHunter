@@ -1,5 +1,5 @@
 // ============================================================
-// ZHunter PRO v7.9.15 - Options / Settings Page
+// ZHunter PRO v7.10.1 - Options / Settings Page
 // Full working settings with API key, toggles,
 // stats, export, danger zone, model list
 // ============================================================
@@ -525,9 +525,17 @@ function initDangerZone() {
           // Sync via background so badge respects new badgeEnabled flag
           await chrome.runtime.sendMessage({
             action: 'UPDATE_SETTINGS',
-            settings: { ...DEFAULT_SETTINGS }
+            settings: {
+              ...DEFAULT_SETTINGS,
+              activeAiProvider: 'OpenRouter',
+              aiApiKey: '', openRouterApiKey: '', groqApiKey: '', geminiApiKey: '', openAiApiKey: ''
+            }
           });
-          currentSettings = { ...DEFAULT_SETTINGS };
+          currentSettings = {
+            ...DEFAULT_SETTINGS,
+            activeAiProvider: 'OpenRouter',
+            aiApiKey: '', openRouterApiKey: '', groqApiKey: '', geminiApiKey: '', openAiApiKey: ''
+          };
 
           // Reload UI
           const apiInput = $('apiKeyInput');
@@ -595,6 +603,70 @@ function initDangerZone() {
   });
 }
 
+// ── AI Settings ───────────────────────────────────────────────
+const AI_PROVIDER_FIELDS = {
+  OpenRouter: 'openRouterApiKey',
+  Groq: 'groqApiKey',
+  Gemini: 'geminiApiKey',
+  OpenAI: 'openAiApiKey'
+};
+
+function updateAiKeyStatus() {
+  const provider = $('aiProviderSelect')?.value || 'OpenRouter';
+  const field = AI_PROVIDER_FIELDS[provider];
+  const configured = !!(currentSettings[field] || (provider === 'OpenRouter' && currentSettings.aiApiKey));
+  const status = $('apiKeyStatus');
+  if (status) {
+    status.textContent = configured ? `${provider} key is configured locally.` : `No ${provider} key configured.`;
+    status.className = `api-status ${configured ? 'visible' : 'hidden'}`;
+  }
+}
+
+function initAiSettings() {
+  const providerSelect = $('aiProviderSelect');
+  const input = $('apiKeyInput');
+  const saveBtn = $('saveApiKeyBtn');
+  const clearBtn = $('clearApiKeyBtn');
+  if (!providerSelect || !input) return;
+  providerSelect.value = currentSettings.activeAiProvider || 'OpenRouter';
+  updateAiKeyStatus();
+  providerSelect.addEventListener('change', () => {
+    input.value = '';
+    updateAiKeyStatus();
+  });
+  saveBtn?.addEventListener('click', async () => {
+    const provider = providerSelect.value || 'OpenRouter';
+    const key = input.value.trim();
+    if (key.length < 8 || key.length > 500) {
+      toast('Enter a valid API key.', 'warn');
+      return;
+    }
+    const field = AI_PROVIDER_FIELDS[provider];
+    const patch = { activeAiProvider: provider, [field]: key };
+    if (provider === 'OpenRouter') patch.aiApiKey = key;
+    const ok = await saveSettings(patch);
+    if (ok) {
+      currentSettings = { ...currentSettings, ...patch };
+      input.value = '';
+      updateAiKeyStatus();
+      toast(`${provider} API key saved locally`, 'ok');
+    } else toast('Failed to save API key', 'err');
+  });
+  clearBtn?.addEventListener('click', async () => {
+    const provider = providerSelect.value || 'OpenRouter';
+    const field = AI_PROVIDER_FIELDS[provider];
+    const patch = { activeAiProvider: provider, [field]: '' };
+    if (provider === 'OpenRouter') patch.aiApiKey = '';
+    const ok = await saveSettings(patch);
+    if (ok) {
+      currentSettings = { ...currentSettings, ...patch };
+      input.value = '';
+      updateAiKeyStatus();
+      toast(`${provider} API key cleared`, 'info');
+    } else toast('Failed to clear API key', 'err');
+  });
+}
+
 // ── Init ──────────────────────────────────────────────────────
 async function init() {
   try {
@@ -615,6 +687,7 @@ async function init() {
   }
 
   await initTheme();
+  initAiSettings();
 
   initToggle('toggle-autoCategory',   'autoCategory');
   initToggle('toggle-duplicateCheck', 'duplicateCheck');

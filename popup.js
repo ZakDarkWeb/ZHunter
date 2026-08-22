@@ -1,5 +1,5 @@
 // ============================================================
-// ZHunter PRO v7.9.15 — Popup Controller
+// ZHunter PRO v7.10.1 — Popup Controller
 // Fixes: API key removed, async tag race fixed, video support,
 //        clipboard guard, Daraz/Shein scrapers, working AI models
 // ============================================================
@@ -662,8 +662,8 @@ function initCollectTab() {
     const title = titleInput?.value.trim();
     if (!title) { toast('Hunt or enter a product title first!', 'warn'); return; }
 
-    const apiKey = State.data.settings?.aiApiKey;
-    if (!apiKey) {
+    const hasApiKey = State.data.settings?.hasApiKey === true;
+    if (!hasApiKey) {
       toast('Add your OpenRouter API key in Settings first', 'warn');
       setTimeout(() => chrome.runtime.openOptionsPage(), 1500);
       return;
@@ -2858,13 +2858,8 @@ function initHuntPreviewModal() {
 
     const settings = State.data?.settings || {};
     const provider = settings.activeAiProvider || 'OpenRouter';
-    let apiKey = '';
-    if (provider === 'OpenRouter') apiKey = settings.openRouterApiKey || settings.aiApiKey;
-    else if (provider === 'Groq') apiKey = settings.groqApiKey;
-    else if (provider === 'Gemini') apiKey = settings.geminiApiKey;
-    else if (provider === 'OpenAI') apiKey = settings.openAiApiKey;
-
-    if (!apiKey) { alert('Add API key in Settings first.'); return; }
+    const configuredProviders = Array.isArray(settings.configuredProviders) ? settings.configuredProviders : [];
+    if (!configuredProviders.includes(provider)) { alert('Add API key in Settings first.'); return; }
 
     btn.disabled = true;
     btn.textContent = '⏳ Generating...';
@@ -2946,11 +2941,11 @@ function initHuntPreviewModal() {
       toast('Product saved! 🛍️ Images loading in background…', 'ok');
 
       // Background enrichment (base64 + AI)
-      const apiKeyForAi = State.data?.settings?.aiApiKey || '';
+      const hasApiKeyForAi = State.data?.settings?.hasApiKey === true;
       msg({
         action: 'ENRICH_LINK',
         linkId: fastRes.link.id,
-        runAi:  !!apiKeyForAi
+        runAi: hasApiKeyForAi
       }).catch(() => {});
 
     } finally {
