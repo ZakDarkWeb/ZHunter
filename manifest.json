@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ZHunter PRO",
-  "version": "7.10.1",
+  "version": "7.10.4",
   "description": "Cyberpunk product hunter with bulk multi-tab hunting, customizable XLSX/CSV/HTML exports with hyperlinks and Excel formulas, master sheet with quick re-hunt and bulk delete, smart image upgrades for Amazon/Walmart/Sam's/Faire.",
   "author": "ZHunter",
   "permissions": [
@@ -66,6 +66,12 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["icon16.png", "icon32.png", "icon48.png", "icon128.png"],
+      "matches": ["http://*/*", "https://*/*"]
+    }
+  ],
   "content_scripts": [
     {
       "matches": [

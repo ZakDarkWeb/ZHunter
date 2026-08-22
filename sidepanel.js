@@ -1,5 +1,5 @@
 // ============================================================
-// ZHunter PRO v7.10.1 — Side Panel Controller
+// ZHunter PRO v7.10.4 — Side Panel Controller
 // Fixes: API key removed, async tag race fixed, video support,
 //        clipboard guard, Daraz/Shein scrapers, working AI models
 // ============================================================

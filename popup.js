@@ -1,5 +1,5 @@
 // ============================================================
-// ZHunter PRO v7.10.1 — Popup Controller
+// ZHunter PRO v7.10.4 — Popup Controller
 // Fixes: API key removed, async tag race fixed, video support,
 //        clipboard guard, Daraz/Shein scrapers, working AI models
 // ============================================================

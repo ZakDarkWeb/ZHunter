@@ -2955,8 +2955,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const root = document.createElement('div');
     root.id = PANEL_ID;
     Object.assign(root.style, {
-      position: 'fixed', top: '80px', right: '0',
-      zIndex: '2147483640', fontFamily: 'sans-serif'
+      position: 'fixed', top: '80px', right: '16px', left: 'auto',
+      zIndex: '2147483640', fontFamily: 'sans-serif',
+      touchAction: 'none'
     });
     document.documentElement.appendChild(root);
 
@@ -3006,7 +3007,28 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         animation: zh-slide-in 0.45s cubic-bezier(0.16,1,0.3,1) both, zh-border-pulse 4s ease-in-out 1.5s infinite;
         transition: transform 0.4s cubic-bezier(0.16,1,0.3,1);
       }
-      .panel.collapsed { transform: translateX(253px); animation: zh-border-pulse 4s ease-in-out infinite; }
+      .panel.collapsed { display: none; }
+      .mini-widget {
+        width: 48px; height: 48px; border-radius: 14px; position: relative;
+        display: flex; align-items: center; justify-content: center;
+        cursor: grab; user-select: none; touch-action: none;
+        background: linear-gradient(135deg, #041827 0%, #07111f 100%);
+        border: 2px solid rgba(0,229,255,0.65);
+        box-shadow: 0 5px 22px rgba(0,0,0,0.55), 0 0 18px rgba(0,229,255,0.28);
+        transition: transform 0.18s, box-shadow 0.18s;
+      }
+      .mini-widget:hover { transform: scale(1.06); box-shadow: 0 7px 26px rgba(0,0,0,0.6), 0 0 24px rgba(0,229,255,0.45); }
+      .mini-widget:active { cursor: grabbing; transform: scale(0.96); }
+      .mini-widget img { width: 30px; height: 30px; object-fit: contain; pointer-events: none; }
+      .mini-logo-fallback { display: none; color: #00e5ff; font: 900 16px/1 system-ui, sans-serif; letter-spacing: -1px; text-shadow: 0 0 10px rgba(0,229,255,0.75); pointer-events: none; }
+      .mini-count {
+        position: absolute; right: -7px; top: -7px; min-width: 18px; height: 18px;
+        padding: 0 4px; display: flex; align-items: center; justify-content: center;
+        border-radius: 999px; background: #00e5ff; color: #001018;
+        border: 2px solid #061321; font: 800 9px/1 system-ui, sans-serif;
+      }
+      .header { cursor: grab; touch-action: none; }
+      .header:active { cursor: grabbing; }
 
       .header {
         display: flex; align-items: center; justify-content: space-between;
@@ -3159,6 +3181,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     panel.className = 'panel';
     shadow.appendChild(panel);
 
+    const miniWidget = document.createElement('button');
+    miniWidget.className = 'mini-widget';
+    miniWidget.type = 'button';
+    miniWidget.title = 'Open ZHunter Images';
+    miniWidget.setAttribute('aria-label', 'Open ZHunter Images');
+    miniWidget.innerHTML = `<img src="${chrome.runtime.getURL('icon48.png')}" alt="ZHunter" draggable="false"><span class="mini-logo-fallback" aria-hidden="true">ZH</span><span class="mini-count">0</span>`;
+    miniWidget.style.display = 'none';
+    const miniLogo = miniWidget.querySelector('img');
+    miniLogo.addEventListener('error', () => {
+      miniLogo.style.display = 'none';
+      miniWidget.querySelector('.mini-logo-fallback').style.display = 'block';
+    }, { once: true });
+    shadow.appendChild(miniWidget);
+
     // â”€â”€ Header
     const header = document.createElement('div');
     header.className = 'header';
@@ -3199,30 +3235,123 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     let images = [];
     let selected = new Set();
     let collapsed = false;
+    let widgetPosition = { top: 80, left: null, right: 16 };
+    let dragging = false;
+    let dragMoved = false;
+    let dragOffset = { x: 0, y: 0 };
+    let dragOrigin = { x: 0, y: 0 };
+    const WIDGET_STATE_KEY = 'zhunterImageWidgetState';
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬ Toggle collapse
     const toggleBtn = shadow.getElementById('zh-toggle-btn');
     const countEl   = shadow.getElementById('zh-img-count');
+    const miniCount = miniWidget.querySelector('.mini-count');
     const dlBtn     = shadow.getElementById('zh-dl-btn');
     const status    = shadow.getElementById('zh-status');
 
-    header.addEventListener('click', (e) => {
-      if (e.target === toggleBtn) return;
-      collapsed = !collapsed;
+    const saveWidgetState = () => {
+      chrome.storage.local.set({ [WIDGET_STATE_KEY]: {
+        collapsed,
+        top: widgetPosition.top,
+        left: widgetPosition.left,
+        right: widgetPosition.right
+      } }).catch(() => {});
+    };
+    const applyWidgetPosition = () => {
+      const maxTop = Math.max(8, window.innerHeight - (collapsed ? 56 : 380));
+      widgetPosition.top = Math.max(8, Math.min(Number(widgetPosition.top) || 80, maxTop));
+      root.style.top = `${widgetPosition.top}px`;
+      if (Number.isFinite(widgetPosition.left)) {
+        const maxLeft = Math.max(8, window.innerWidth - (collapsed ? 48 : 295) - 8);
+        widgetPosition.left = Math.max(8, Math.min(widgetPosition.left, maxLeft));
+        root.style.left = `${widgetPosition.left}px`;
+        root.style.right = 'auto';
+      } else {
+        root.style.left = 'auto';
+        root.style.right = `${Number.isFinite(widgetPosition.right) ? widgetPosition.right : 16}px`;
+      }
+    };
+    const applyCollapsedState = () => {
       panel.classList.toggle('collapsed', collapsed);
+      miniWidget.style.display = collapsed ? 'flex' : 'none';
       toggleBtn.textContent = collapsed ? '\u25B6' : '\u25C0';
+      miniCount.textContent = images.length > 99 ? '99+' : String(images.length);
+      applyWidgetPosition();
+    };
+    const setCollapsed = value => {
+      collapsed = !!value;
+      applyCollapsedState();
+      saveWidgetState();
+    };
+
+    const beginDrag = (event, target) => {
+      if (event.button !== undefined && event.button !== 0) return;
+      const rect = root.getBoundingClientRect();
+      dragging = true;
+      dragMoved = false;
+      dragOrigin = { x: event.clientX, y: event.clientY };
+      dragOffset = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      target.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    };
+    const moveDrag = event => {
+      if (!dragging) return;
+      const nextLeft = event.clientX - dragOffset.x;
+      const nextTop = event.clientY - dragOffset.y;
+      if (Math.abs(event.clientX - dragOrigin.x) > 3 || Math.abs(event.clientY - dragOrigin.y) > 3) dragMoved = true;
+      widgetPosition.left = Math.max(8, Math.min(nextLeft, window.innerWidth - (collapsed ? 48 : 295) - 8));
+      widgetPosition.top = Math.max(8, Math.min(nextTop, window.innerHeight - (collapsed ? 56 : 380))); 
+      widgetPosition.right = null;
+      applyWidgetPosition();
+    };
+    const endDrag = () => {
+      if (!dragging) return;
+      dragging = false;
+      saveWidgetState();
+    };
+    header.addEventListener('pointerdown', event => {
+      if (event.target !== toggleBtn) beginDrag(event, header);
     });
-    toggleBtn.addEventListener('click', () => {
-      collapsed = !collapsed;
-      panel.classList.toggle('collapsed', collapsed);
-      toggleBtn.textContent = collapsed ? '\u25B6' : '\u25C0';
+    miniWidget.addEventListener('pointerdown', event => beginDrag(event, miniWidget));
+    window.addEventListener('pointermove', moveDrag, { passive: false });
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
+    toggleBtn.addEventListener('click', event => {
+      event.stopPropagation();
+      setCollapsed(!collapsed);
     });
+    miniWidget.addEventListener('pointerup', event => {
+      const wasDragged = dragMoved;
+      endDrag();
+      event.preventDefault();
+      event.stopPropagation();
+      if (!wasDragged) setCollapsed(false);
+      dragMoved = false;
+    });
+    miniWidget.addEventListener('click', event => {
+      // Pointer-up owns restoration. Cancel the browser-generated click so a
+      // drag can never reopen the full card after the pointer is released.
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    chrome.storage.local.get(WIDGET_STATE_KEY).then(result => {
+      const saved = result?.[WIDGET_STATE_KEY];
+      if (!saved || typeof saved !== 'object') return;
+      collapsed = saved.collapsed === true;
+      widgetPosition = {
+        top: Number.isFinite(saved.top) ? saved.top : 80,
+        left: Number.isFinite(saved.left) ? saved.left : null,
+        right: Number.isFinite(saved.right) ? saved.right : 16
+      };
+      applyCollapsedState();
+    }).catch(() => {});
 
     // Ã¢â€â‚¬Ã¢â€â‚¬ Render grid
     function renderGrid() {
       const b = shadow.getElementById('zh-img-body');
       if (!images.length) {
         b.innerHTML = `<div class="empty">No product images found<br>on this page.</div>`;
+        countEl.textContent = '0';
+        miniCount.textContent = '0';
         return;
       }
       countEl.textContent = images.length;

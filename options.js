@@ -1,5 +1,5 @@
 // ============================================================
-// ZHunter PRO v7.10.1 - Options / Settings Page
+// ZHunter PRO v7.10.4 - Options / Settings Page
 // Full working settings with API key, toggles,
 // stats, export, danger zone, model list
 // ============================================================
