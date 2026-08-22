@@ -12,6 +12,25 @@ const STORAGE_KEY   = 'zakLinkCollectorData';
 const BADGE_COLOR   = '#06b6d4';
 const SUCCESS_COLOR = '#10b981';
 
+// Bulk Queue storage key — persistent queue of product URLs to hunt sequentially
+const BULK_QUEUE_KEY = 'zhunterBulkQueue';
+
+// Platform hostname patterns for auto-capture (mirrors PLATFORM_PATTERNS in popup.js)
+const BG_PLATFORM_KEYS = [
+  'walmart.com', 'amazon.', 'samsclub.com', 'faire.com', 'aliexpress.',
+  'alibaba.com', 'temu.', 'ebay.', 'etsy.com', 'shein.com', 'daraz.',
+  'worldwidegolfballs.com', 'worldwidegolfshops.com', 'flipkart.com',
+  'noon.com', 'lazada.', 'myshopify.com', 'target.com', 'costco.com',
+  'bestbuy.com', 'homedepot.com'
+];
+function bgDetectPlatform(url) {
+  if (!url) return null;
+  try {
+    const h = new URL(url).hostname.toLowerCase();
+    return BG_PLATFORM_KEYS.find(k => h.includes(k)) || null;
+  } catch { return null; }
+}
+
 const IMG_CAP = 15;
 const VID_CAP = 12;
 
@@ -1308,6 +1327,41 @@ async function handleMessage(msg) {
       return { success: ok };
     }
 
+    // ── Bulk Queue CRUD ─────────────────────────────────────────
+    case 'GET_BULK_QUEUE': {
+      const res = await chrome.storage.local.get(BULK_QUEUE_KEY);
+      return { success: true, queue: res[BULK_QUEUE_KEY] || [] };
+    }
+    case 'ADD_TO_BULK_QUEUE': {
+      // Manual add from popup paste-URL bar
+      const res2 = await chrome.storage.local.get(BULK_QUEUE_KEY);
+      const q = res2[BULK_QUEUE_KEY] || [];
+      const normUrl = (msg.url || '').split('#')[0].trim();
+      if (!normUrl) return { success: false, reason: 'empty_url' };
+      if (q.some(i => i.url === normUrl)) return { success: false, reason: 'duplicate' };
+      const newItem = { id: `q_${Date.now()}_${Math.random().toString(36).slice(2,6)}`, url: normUrl, title: msg.title || normUrl, platform: msg.platform || null, addedAt: Date.now(), checked: true };
+      q.push(newItem);
+      await chrome.storage.local.set({ [BULK_QUEUE_KEY]: q });
+      broadcastMessage({ action: 'BULK_QUEUE_UPDATED', item: newItem });
+      return { success: true };
+    }
+    case 'REMOVE_FROM_BULK_QUEUE': {
+      const res3 = await chrome.storage.local.get(BULK_QUEUE_KEY);
+      const q3 = (res3[BULK_QUEUE_KEY] || []).filter(i => i.id !== msg.id);
+      await chrome.storage.local.set({ [BULK_QUEUE_KEY]: q3 });
+      return { success: true };
+    }
+    case 'UPDATE_BULK_QUEUE': {
+      // Full replace — popup sends updated array (check/uncheck, reorder)
+      if (!Array.isArray(msg.queue)) return { success: false };
+      await chrome.storage.local.set({ [BULK_QUEUE_KEY]: msg.queue });
+      return { success: true };
+    }
+    case 'CLEAR_BULK_QUEUE': {
+      await chrome.storage.local.set({ [BULK_QUEUE_KEY]: [] });
+      return { success: true };
+    }
+
     default: return { success: false, reason: 'unknown_action' };
   }
 }
@@ -1408,3 +1462,39 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 // so the listener below was dead code that would cause a double-open bug
 // if Chrome's behaviour ever changes.
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+
+// ── Auto-Capture: add product pages to Bulk Queue as user browses ─────────
+// Fires when a tab finishes loading. If the URL matches a known sourcing
+// platform, the URL is appended to the persistent Bulk Queue (deduped).
+// A message is broadcast so open popup/sidepanel panels refresh their list.
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status !== 'complete') return;
+  const url = tab.url || '';
+  if (!url.startsWith('http')) return;
+  if (!bgDetectPlatform(url)) return;
+
+  // Check auto-capture enabled setting (default: true)
+  const stored = await chrome.storage.local.get(['zakLinkCollectorData', BULK_QUEUE_KEY]);
+  const settings = stored['zakLinkCollectorData']?.settings || {};
+  if (settings.bulkQueueAutoCapture === false) return;
+
+  const queue = stored[BULK_QUEUE_KEY] || [];
+  const normUrl = url.split('#')[0].trim();
+  if (queue.some(i => i.url === normUrl)) return; // already queued
+
+  const newItem = {
+    id:        `q_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    url:       normUrl,
+    title:     tab.title || normUrl,
+    platform:  bgDetectPlatform(normUrl),
+    addedAt:   Date.now(),
+    checked:   true
+  };
+  queue.push(newItem);
+  // Keep queue from growing unbounded
+  const trimmed = queue.slice(-500);
+  await chrome.storage.local.set({ [BULK_QUEUE_KEY]: trimmed });
+
+  // Notify open popup / sidepanel to refresh their queue list
+  chrome.runtime.sendMessage({ action: 'BULK_QUEUE_UPDATED', item: newItem }).catch(() => {});
+});

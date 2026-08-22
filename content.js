@@ -2442,4 +2442,263 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return true;
 });
 
+// ── In-Page ZHunter Floating Button ──────────────────────────
+(function() {
+  const BG_PLATFORM_KEYS = [
+    'walmart.com', 'amazon.', 'samsclub.com', 'faire.com', 'aliexpress.',
+    'alibaba.com', 'temu.', 'ebay.', 'etsy.com', 'shein.com', 'daraz.',
+    'worldwidegolfballs.com', 'worldwidegolfshops.com', 'flipkart.com',
+    'noon.com', 'lazada.', 'myshopify.com', 'target.com', 'costco.com',
+    'bestbuy.com', 'homedepot.com'
+  ];
+
+  const currentHost = host();
+  const currentPath = location.pathname.toLowerCase();
+  const currentUrl  = location.href.toLowerCase();
+
+  // Step 1: Must be a known shopping domain
+  const isProductDomain = BG_PLATFORM_KEYS.some(k => currentHost.includes(k));
+  if (!isProductDomain) return;
+
+  // Step 2: Must be an actual product page — NOT search/category/home
+  const PRODUCT_URL_PATTERNS = [
+    /\/ip\//,           // Walmart: /ip/product-name/12345
+    /\/dp\//,           // Amazon: /dp/ASIN
+    /\/gp\/product\//,  // Amazon alternate
+    /\/product\//,      // Sam's Club, generic
+    /\/itm\//,          // eBay: /itm/12345
+    /\/listing\//,      // Etsy: /listing/12345
+    /\/item\//,         // AliExpress, Lazada
+    /\/goods[-_]?(detail)?/,  // Temu
+    /\/p-/,             // Shein, Daraz: /p-1234
+    /\/products?\//,    // Shopify stores
+    /\/pd\//,           // BestBuy
+    /\/skuId=/,         // Target, BestBuy query param
+    /[?&]sku[_-]?id=/i, // generic SKU param
+    /\/prd\//,          // Noon
+    /\/buy\//,          // Walmart alternate
+    /[?&]itemid=/,      // Lazada
+    /\/asin\//,         // Amazon alternate paths
+  ];
+
+  const NON_PRODUCT_PATTERNS = [
+    /\/search[\/?]/,
+    /\/s\?/,
+    /\/browse\//,
+    /\/category\//,
+    /\/collection/,
+    /\/shop\/?$/,
+    /\/deals\/?/,
+    /\/offers\/?/,
+    /^\/?$/,            // homepage (root path)
+    /\/cart\//,
+    /\/checkout\//,
+    /\/account\//,
+    /\/wishlist\//,
+  ];
+
+  const isNonProduct = NON_PRODUCT_PATTERNS.some(p => p.test(currentPath) || p.test(currentUrl));
+  if (isNonProduct) return;
+
+  const isProductPage = PRODUCT_URL_PATTERNS.some(p => p.test(currentPath) || p.test(currentUrl));
+  if (!isProductPage) return;
+
+  // Wait for document to be interactive or complete
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initFloatingButton);
+  } else {
+    initFloatingButton();
+  }
+
+  function initFloatingButton() {
+    // Avoid double injection
+    if (document.getElementById('zhunter-floating-root')) return;
+
+    console.log('[ZHunter] Initializing floating button on:', location.href);
+
+    const root = document.createElement('div');
+    root.id = 'zhunter-floating-root';
+    root.style.position = 'fixed';
+    root.style.top = '20px';
+    root.style.right = '20px';
+    root.style.zIndex = '2147483647';
+    root.style.pointerEvents = 'auto';
+    document.body.appendChild(root);
+
+    const shadow = root.attachShadow({ mode: 'open' });
+
+    // Stylesheet matching ZHunter cyberpunk theme (neon cyan / neon green)
+    const style = document.createElement('style');
+    style.textContent = `
+      .zhunter-float-wrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Outfit", sans-serif;
+        pointer-events: auto;
+      }
+      .zhunter-btn {
+        background: linear-gradient(135deg, #06b6d4, #0891b2) !important;
+        color: #ffffff !important;
+        border: 1px solid rgba(6, 182, 212, 0.4) !important;
+        padding: 8px 14px !important;
+        border-radius: 20px !important;
+        font-size: 12px !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.5px !important;
+        cursor: pointer !important;
+        box-shadow: 0 0 16px rgba(6, 182, 212, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        user-select: none !important;
+        backdrop-filter: blur(4px) !important;
+        pointer-events: auto !important;
+      }
+      .zhunter-btn:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 0 24px rgba(6, 182, 212, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+        border-color: rgba(6, 182, 212, 0.8) !important;
+      }
+      .zhunter-btn:active {
+        transform: translateY(0) !important;
+      }
+      .zhunter-btn.added {
+        background: linear-gradient(135deg, #10b981, #059669) !important;
+        border-color: rgba(16, 185, 129, 0.4) !important;
+        box-shadow: 0 0 16px rgba(16, 185, 129, 0.25) !important;
+      }
+      .zhunter-btn.added:hover {
+        box-shadow: 0 0 24px rgba(16, 185, 129, 0.45) !important;
+        border-color: rgba(16, 185, 129, 0.8) !important;
+      }
+      .zhunter-icon {
+        font-size: 13px !important;
+        line-height: 1 !important;
+      }
+      /* Quick In-Page Toast */
+      .zhunter-toast {
+        position: fixed;
+        top: 70px;
+        right: 20px;
+        background: rgba(15, 23, 42, 0.95) !important;
+        color: #e2e8f0 !important;
+        border: 1px solid rgba(6, 182, 212, 0.3) !important;
+        padding: 8px 16px !important;
+        border-radius: 8px !important;
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+        transform: translateY(-20px) !important;
+        opacity: 0 !important;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        pointer-events: none !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+      }
+      .zhunter-toast.show {
+        transform: translateY(0) !important;
+        opacity: 1 !important;
+      }
+    `;
+    shadow.appendChild(style);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'zhunter-float-wrap';
+
+    const btn = document.createElement('button');
+    btn.className = 'zhunter-btn';
+    btn.innerHTML = '<span class="zhunter-icon">⚡</span><span>Add to Queue</span>';
+
+    const toast = document.createElement('div');
+    toast.className = 'zhunter-toast';
+    toast.innerHTML = '<span>🚀</span><span>Product added to ZHunter Queue!</span>';
+
+    wrap.appendChild(btn);
+    shadow.appendChild(wrap);
+    shadow.appendChild(toast);
+
+    const normUrl = location.href.split('#')[0].trim();
+
+    // Check if already in queue
+    try {
+      console.log('[ZHunter] Checking initial queue status...');
+      chrome.runtime.sendMessage({ action: 'GET_BULK_QUEUE' }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.warn('[ZHunter] Could not fetch queue (extension reloaded/disconnected):', chrome.runtime.lastError.message);
+          return;
+        }
+        const q = response?.queue || [];
+        if (q.some(item => item.url === normUrl)) {
+          console.log('[ZHunter] Product is already queued.');
+          markAdded();
+        }
+      });
+    } catch (e) {
+      console.warn('[ZHunter] Exception querying queue:', e);
+    }
+
+    function markAdded() {
+      btn.classList.add('added');
+      btn.innerHTML = '<span class="zhunter-icon">✓</span><span>Queued</span>';
+    }
+
+    function showToast() {
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 2500);
+    }
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+
+      if (btn.classList.contains('added')) {
+        console.log('[ZHunter] Product already queued. Ignoring click.');
+        return;
+      }
+
+      console.log('[ZHunter] Floating button clicked. Sending ADD_TO_BULK_QUEUE...');
+
+      // Detect current platform name
+      let platformName = null;
+      try {
+        const platMatch = BG_PLATFORM_KEYS.find(k => currentHost.includes(k));
+        if (platMatch) {
+          platformName = platMatch.split('.')[0];
+          platformName = platformName.charAt(0).toUpperCase() + platformName.slice(1);
+        }
+      } catch (_) {}
+
+      try {
+        chrome.runtime.sendMessage({
+          action: 'ADD_TO_BULK_QUEUE',
+          url: normUrl,
+          title: document.title,
+          platform: platformName
+        }, (res) => {
+          if (chrome.runtime.lastError) {
+            console.error('[ZHunter] Send message error:', chrome.runtime.lastError);
+            alert("ZHunter Connection Error!\nThe extension was reloaded in the background. Please refresh this tab to reconnect and add the product.");
+            return;
+          }
+          console.log('[ZHunter] Queue add response:', res);
+          if (res?.success || res?.reason === 'duplicate') {
+            markAdded();
+            showToast();
+          } else {
+            alert("Failed to add product: " + (res?.reason || 'unknown error'));
+          }
+        });
+      } catch (err) {
+        console.error('[ZHunter] Context invalidated error on click:', err);
+        alert("ZHunter Connection Error!\nThe extension was reloaded in the background. Please refresh this tab to reconnect and add the product.");
+      }
+    });
+  }
+})();
+
 } // end __zhunterContentLoaded guard

@@ -3365,15 +3365,18 @@ const BulkState = {
   currentBatchId: null,
   huntStartTime:  null, // for live speed/ETA stats
 
-  // Tunables — balanced for real-world speed (Walmart/Amazon background tabs)
-  PARALLEL:    8,    // 8 concurrent workers
+  // Tunables — optimized for speed
+  PARALLEL:    10,   // 10 concurrent workers (was 8)
   CHUNK_SIZE:  40,   // 40 tabs per chunk
-  TAB_TIMEOUT: 8000, // 8s per tab — fail fast, retry is cheap now
-  CHUNK_PAUSE: 800,  // 0.8s between chunks
-  MAX_RETRIES: 2     // 2 retries — inject-only retries are fast
+  TAB_TIMEOUT: 8000, // 8s per tab
+  CHUNK_PAUSE: 400,  // 0.4s between chunks (was 0.8s)
+  MAX_RETRIES: 2,    // 2 retries
+  AUTO_CLOSE_TABS: false // close each tab immediately after successful scrape
 };
 
 const HUNT_STATE_KEY = 'zhunterHuntState'; // for auto-resume
+
+const BULK_QUEUE_KEY = 'zhunterBulkQueue'; // persistent queue of URLs to hunt sequentially
 
 const MASTER_KEY  = 'zhunterMasterSheet';
 const BATCHES_KEY = 'zhunterMasterBatches';
@@ -3390,6 +3393,15 @@ function initBulkTab() {
   $('bulkFailedToggle')?.addEventListener('click', toggleFailedList);
 
   $('bulkHuntStartBtn')?.addEventListener('click', () => startBulkHunt());
+
+  // Auto-close toggle
+  const autoCloseToggle = $('bulkAutoCloseToggle');
+  if (autoCloseToggle) {
+    autoCloseToggle.checked = BulkState.AUTO_CLOSE_TABS;
+    autoCloseToggle.addEventListener('change', () => {
+      BulkState.AUTO_CLOSE_TABS = autoCloseToggle.checked;
+    });
+  }
 
   // Master sheet buttons
   $('masterDlXlsxBtn')?.addEventListener('click', () => downloadMasterSheet('xlsx'));
@@ -3423,27 +3435,277 @@ function initBulkTab() {
     downloadPdfCatalog(rows, 'Bulk Hunt Catalog');
   });
 
+  // ── Queue view buttons
+  $('bulkViewQueueBtn')?.addEventListener('click', () => switchBulkView('queue'));
+  $('queueAddBtn')?.addEventListener('click', onQueueAddUrl);
+  $('queueAddInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') onQueueAddUrl(); });
+  $('queueSelectAllBtn')?.addEventListener('click',   () => toggleAllQueue(true));
+  $('queueDeselectAllBtn')?.addEventListener('click', () => toggleAllQueue(false));
+  $('queueClearDoneBtn')?.addEventListener('click',   clearHuntedQueueItems);
+  $('queueClearAllBtn')?.addEventListener('click',    clearAllQueue);
+  $('bulkQueueHuntBtn')?.addEventListener('click',    startQueueHunt);
+
+  // Auto-capture toggle — persist setting to storage
+  $('queueAutoCaptureToggle')?.addEventListener('change', e => {
+    msg({ action: 'GET_DATA' }).then(d => {
+      const settings = d?.settings || {};
+      settings.bulkQueueAutoCapture = e.target.checked;
+      msg({ action: 'UPDATE_SETTINGS', settings });
+    });
+  });
+
+  // Live-refresh queue list when background auto-captures a new URL
+  chrome.runtime.onMessage.addListener((m) => {
+    if (m?.action === 'BULK_QUEUE_UPDATED' && BulkState.view === 'queue') loadBulkQueue();
+  });
+
   // Auto-refresh tab list when Bulk tab is opened
   document.querySelector('[data-tab="bulk"]')?.addEventListener('click', () => {
-    if (BulkState.view === 'tabs') loadBulkTabs();
+    if (BulkState.view === 'tabs')        loadBulkTabs();
+    else if (BulkState.view === 'queue') loadBulkQueue();
     else updateMasterStats();
   });
 
   // Initial load
   loadBulkTabs();
+  loadBulkQueue();
   updateMasterStats();
   checkPendingHunt(); // Show resume banner if a hunt was interrupted
+  // Sync auto-capture toggle from settings
+  msg({ action: 'GET_DATA' }).then(d => {
+    const v = d?.settings?.bulkQueueAutoCapture;
+    const chk = $('queueAutoCaptureToggle');
+    if (chk && v !== undefined) chk.checked = !!v;
+  });
 }
 
 function switchBulkView(view) {
   BulkState.view = view;
-  $('bulkViewTabsBtn').classList.toggle('active',   view === 'tabs');
-  $('bulkViewMasterBtn').classList.toggle('active', view === 'master');
-  $('bulkTabsView').classList.toggle('active',   view === 'tabs');
-  $('bulkMasterView').classList.toggle('active', view === 'master');
+  $('bulkViewTabsBtn')?.classList.toggle('active',   view === 'tabs');
+  $('bulkViewQueueBtn')?.classList.toggle('active',  view === 'queue');
+  $('bulkViewMasterBtn')?.classList.toggle('active', view === 'master');
+  $('bulkTabsView')?.classList.toggle('active',   view === 'tabs');
+  $('bulkQueueView')?.classList.toggle('active',  view === 'queue');
+  $('bulkMasterView')?.classList.toggle('active', view === 'master');
   if (view === 'tabs')   loadBulkTabs();
+  if (view === 'queue')  loadBulkQueue();
   if (view === 'master') updateMasterStats();
 }
+
+// ══════════════════════════════════════════════════════════════
+// BULK QUEUE — persistent URL queue + sequential hunt
+// ══════════════════════════════════════════════════════════════
+
+const QueueState = { items: [] };
+
+async function loadBulkQueue() {
+  try {
+    const res = await msg({ action: 'GET_BULK_QUEUE' });
+    QueueState.items = res?.queue || [];
+    renderBulkQueueList();
+  } catch { toast('Failed to load queue', 'err'); }
+}
+
+function renderBulkQueueList() {
+  const list = $('bulkQueueList');
+  if (!list) return;
+  const items = QueueState.items;
+  if (items.length === 0) {
+    list.innerHTML = `<div class="bulk-empty"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 9h6M9 12h6M9 15h4"/></svg><p>Queue is empty — browse product pages<br>or paste a URL above to add them.</p></div>`;
+    updateQueueSummary();
+    return;
+  }
+  list.innerHTML = '';
+  items.forEach(item => {
+    const isChecked = !!item.checked;
+    const isHunted  = !!item.hunted;
+    const platLabel = item.platform
+      ? `<span class="bulk-tab-platform">${esc(item.platform.substring(0,3).toUpperCase())}</span>`
+      : `<span class="bulk-tab-platform unknown">?</span>`;
+    const huntedBadge = isHunted ? `<span class="bulk-tab-dup-badge" title="Already hunted">✅</span>` : '';
+    const shortUrl = (() => { try { const u = new URL(item.url); return u.hostname.replace(/^www\./, '') + u.pathname.slice(0,35); } catch { return item.url.slice(0,50); } })();
+    const row = document.createElement('div');
+    row.className = 'bulk-tab-row' + (isChecked ? ' checked' : '') + (isHunted ? ' duplicate' : '');
+    row.dataset.queueId = item.id;
+    row.innerHTML = `<div class="bulk-tab-checkbox"></div>${platLabel}<div class="bulk-tab-info"><div class="bulk-tab-platform-lbl">${esc(item.title ? trunc(item.title,50) : shortUrl)}${huntedBadge}</div><div class="bulk-tab-title" style="opacity:.55;font-size:10px">${esc(shortUrl)}</div></div><button class="queue-remove-btn" data-id="${esc(item.id)}" title="Remove from queue" style="margin-left:auto;flex-shrink:0;background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:14px;line-height:1;padding:2px 4px">×</button>`;
+    row.addEventListener('click', e => {
+      if (e.target.closest('.queue-remove-btn')) return;
+      item.checked = !item.checked;
+      saveBulkQueue();
+      renderBulkQueueList();
+    });
+    row.querySelector('.queue-remove-btn').addEventListener('click', e => {
+      e.stopPropagation();
+      removeQueueItem(item.id);
+    });
+    list.appendChild(row);
+  });
+  updateQueueSummary();
+}
+
+function updateQueueSummary() {
+  const checked = QueueState.items.filter(i => i.checked && !i.hunted).length;
+  const total   = QueueState.items.length;
+  const cnt = $('bulkQueueCount');
+  const eta = $('bulkQueueEta');
+  const btn = $('bulkQueueHuntBtn');
+  if (cnt) cnt.textContent = `${total} queued (✓ ${checked} selected)`;
+  if (eta) {
+    if (checked === 0) eta.textContent = '';
+    else { const sec = checked * 8; const m = Math.floor(sec/60), s = sec%60; eta.textContent = '~' + (m ? m+'m ' : '') + s + 's estimated'; }
+  }
+  if (btn) btn.disabled = (checked === 0 || BulkState.isHunting);
+}
+
+function saveBulkQueue() { msg({ action: 'UPDATE_BULK_QUEUE', queue: QueueState.items }).catch(() => {}); }
+
+function removeQueueItem(id) {
+  QueueState.items = QueueState.items.filter(i => i.id !== id);
+  saveBulkQueue(); renderBulkQueueList();
+}
+
+function toggleAllQueue(selectAll) {
+  QueueState.items.forEach(i => { i.checked = selectAll; });
+  saveBulkQueue(); renderBulkQueueList();
+}
+
+function clearHuntedQueueItems() {
+  QueueState.items = QueueState.items.filter(i => !i.hunted);
+  saveBulkQueue(); renderBulkQueueList();
+}
+
+function clearAllQueue() {
+  QueueState.items = []; saveBulkQueue(); renderBulkQueueList();
+}
+
+function onQueueAddUrl() {
+  const input = $('queueAddInput');
+  const raw = (input?.value || '').trim();
+  if (!raw) return;
+  let normUrl;
+  try { normUrl = new URL(raw).href.split('#')[0]; } catch { toast('Invalid URL', 'err'); return; }
+  const platform = detectTabPlatform(normUrl);
+  msg({ action: 'ADD_TO_BULK_QUEUE', url: normUrl, title: normUrl, platform: platform?.name || null })
+    .then(res => {
+      if (res?.success) { if (input) input.value = ''; loadBulkQueue(); toast('Added to queue', 'ok'); }
+      else if (res?.reason === 'duplicate') toast('Already in queue', 'warn');
+      else toast('Failed to add URL', 'err');
+    }).catch(() => toast('Failed to add URL', 'err'));
+}
+
+// ── Sequential queue hunt
+async function scrapeQueueItem(queueItem) {
+  const fakeId = queueItem.id;
+  setBulkRowStatus(fakeId, 'active');
+  if (BulkState.isCancelled) { setBulkRowStatus(fakeId, 'fail'); return; }
+  let newTab = null, scraped = null;
+  try {
+    newTab = await chrome.tabs.create({ url: queueItem.url, active: false });
+    const realTabId = newTab.id;
+    setBulkRowMeta(fakeId, 'Loading page…');
+    for (let i = 0; i < 30; i++) { // 30 × 150ms = 4.5s max (was 60×200ms=12s)
+      if (BulkState.isCancelled) break;
+      await sleep(150);
+      try { const t = await new Promise(r => chrome.tabs.get(realTabId, t2 => r(chrome.runtime.lastError ? null : t2))); if (!t || t.status === 'complete') break; } catch { break; }
+    }
+    if (BulkState.isCancelled) { setBulkRowStatus(fakeId, 'fail'); return; }
+    const isLazy = /faire\.com|samsclub\.com|amazon\.|walmart\.com/i.test(queueItem.url);
+    if (isLazy) { try { await chrome.tabs.update(realTabId, { active: true }); await sleep(800); await chrome.tabs.update(realTabId, { active: false }); } catch {} } // was 1200ms
+    setBulkRowMeta(fakeId, 'Injecting…');
+    try { await chrome.scripting.executeScript({ target: { tabId: realTabId }, files: ['content.js'] }); } catch {}
+    await sleep(200);
+    setBulkRowMeta(fakeId, 'Scraping…');
+    scraped = await new Promise(resolve => {
+      let done = false;
+      const finish = v => { if (!done) { done = true; resolve(v); } };
+      const t = setTimeout(() => finish(null), 10000); // was 15000ms
+      try { chrome.tabs.sendMessage(realTabId, { action: 'SCRAPE_PAGE' }, res => { clearTimeout(t); if (chrome.runtime.lastError || !res?.success || !res?.data) finish(null); else finish(res.data); }); }
+      catch { clearTimeout(t); finish(null); }
+    });
+  } catch {} finally { if (newTab?.id) { try { await chrome.tabs.remove(newTab.id); } catch {} } }
+
+  let status = !scraped ? 'fail' : (!scraped.title && (!scraped.images || !scraped.images.length) && !scraped.price) ? 'partial' : 'ok';
+  const resultItem = {
+    tabId: fakeId, url: scraped?.url || queueItem.url,
+    title: scraped?.title || queueItem.title || queueItem.url,
+    price: scraped?.price || '',
+    platform: typeof queueItem.platform === 'string' ? queueItem.platform : (queueItem.platform?.name || 'Other'),
+    images: scraped?.images || [], imagesBase64: [],
+    videos: scraped?.videos || [], variants: scraped?.variants || [],
+    description: scraped?.description || '',
+    status, error: status === 'fail' ? 'no_response' : '',
+    scrapedAt: new Date().toISOString()
+  };
+  BulkState.results.push(resultItem);
+  if (status !== 'fail') BulkState.pendingFlush.push(resultItem);
+  const qi = QueueState.items.find(i => i.id === fakeId);
+  if (qi) qi.hunted = true;
+  setBulkRowStatus(fakeId, status, { images: 0, error: resultItem.error });
+  updateBulkProgressBar();
+}
+
+// Queue hunt — parallel with 3 concurrent workers (was sequential)
+async function processQueueSequential(items) {
+  const QUEUE_PARALLEL = 3;
+  const running = new Set();
+  let idx = 0;
+
+  const runNext = async () => {
+    while (idx < items.length && !BulkState.isCancelled) {
+      while (BulkState.isPaused && !BulkState.isCancelled) await sleep(300);
+      if (BulkState.isCancelled) break;
+      const item = items[idx++];
+      const p = scrapeQueueItem(item).finally(() => running.delete(p));
+      running.add(p);
+      if (running.size >= QUEUE_PARALLEL) await Promise.race(running);
+    }
+  };
+
+  // Start up to QUEUE_PARALLEL runners concurrently
+  const runners = [];
+  for (let i = 0; i < QUEUE_PARALLEL; i++) runners.push(runNext());
+  await Promise.all(runners);
+  // Wait for any remaining in-flight scrapes
+  if (running.size > 0) await Promise.all(running);
+}
+
+async function startQueueHunt() {
+  if (BulkState.isHunting) return;
+  const toHunt = QueueState.items.filter(i => i.checked && !i.hunted);
+  if (toHunt.length === 0) { toast('No items selected in queue', 'warn'); return; }
+  BulkState.isHunting = true; BulkState.isPaused = false; BulkState.isCancelled = false;
+  BulkState.results = []; BulkState.pendingFlush = []; BulkState._flushActive = false;
+  BulkState.currentBatchId = `queue_${Date.now()}`; BulkState.huntStartTime = Date.now();
+  const fakeTabs = toHunt.map(i => ({ tabId: i.id, url: i.url, title: i.title || i.url,
+    platform: typeof i.platform === 'string' ? { name: i.platform, tag: i.platform.substring(0,3).toUpperCase() } : (i.platform ? { name: i.platform, tag: String(i.platform).substring(0,3).toUpperCase() } : null) }));
+  openBulkProgressModal(fakeTabs);
+  $('bulkQueueHuntBtn').disabled = true;
+  await savePendingHunt(fakeTabs);
+  msg({ action: 'START_KEEPALIVE' }).catch(() => {});
+  const flushLoop = async () => {
+    BulkState._flushActive = true;
+    while (BulkState.isHunting || BulkState.pendingFlush.length > 0) {
+      if (BulkState.pendingFlush.length > 0) { const rows = BulkState.pendingFlush.splice(0, 50); await appendToMasterSheet(rows); }
+      else await sleep(500);
+    }
+    BulkState._flushActive = false;
+  };
+  flushLoop();
+  try {
+    updateBulkProgressTitle(`🚀 Processing ${toHunt.length} queued items…`);
+    await processQueueSequential(toHunt);
+    if (!BulkState.isCancelled) await imageDownloadPhase();
+  } catch (e) { toast('Queue hunt error: ' + (e?.message || 'unknown'), 'err'); }
+  BulkState.isHunting = false;
+  const flushDeadline = Date.now() + 10000;
+  while (BulkState._flushActive && Date.now() < flushDeadline) await sleep(100);
+  BulkState._flushActive = false;
+  saveBulkQueue();
+  await clearPendingHunt();
+  finishBulkHunt();
+  loadBulkQueue();
+}
+
 
 // ── Tab list loading ────────────────────────────────────────
 async function loadBulkTabs() {
@@ -3692,87 +3954,103 @@ function toggleFailedList() {
 }
 
 async function processSmartQueue(tabs) {
-  let cursor = 0;
   const activeDomains = {};
   const running = new Set();
   const MAX_GLOBAL = BulkState.PARALLEL || 8;
   const MAX_PER_DOMAIN = 3;
 
-  while (cursor < tabs.length || running.size > 0) {
+  // Returns true if there are any tabs not yet started
+  const hasUnstarted = () => tabs.some(t => !t._started);
+
+  while (hasUnstarted() || running.size > 0) {
     if (BulkState.isCancelled) break;
     while (BulkState.isPaused && !BulkState.isCancelled) await sleep(300);
-    
-    while (running.size < MAX_GLOBAL && cursor < tabs.length) {
-      let nextIndex = -1;
-      for (let i = cursor; i < tabs.length; i++) {
+
+    // Fill up to MAX_GLOBAL slots with eligible tabs
+    let startedAny = true;
+    while (startedAny && running.size < MAX_GLOBAL && hasUnstarted()) {
+      startedAny = false;
+      for (let i = 0; i < tabs.length; i++) {
         if (tabs[i]._started) continue;
+        if (running.size >= MAX_GLOBAL) break;
         const host = safeHost(tabs[i].url);
-        if ((activeDomains[host] || 0) < MAX_PER_DOMAIN) {
-          nextIndex = i;
-          break;
-        }
-      }
-      
-      if (nextIndex === -1) break; // no tab can start now (domain limits)
-      
-      const tab = tabs[nextIndex];
-      tab._started = true;
-      const host = safeHost(tab.url);
-      activeDomains[host] = (activeDomains[host] || 0) + 1;
-      
-      const p = (async () => {
-        try {
-          await scrapeOneTab(tab);
-          if (!BulkState.isCancelled) {
-            for (let attempt = 2; attempt <= BulkState.MAX_RETRIES + 1; attempt++) {
-              if (BulkState.isCancelled) break;
-              
-              let lastResIndex = -1;
-              for (let j = BulkState.results.length - 1; j >= 0; j--) {
-                if (BulkState.results[j].tabId === tab.tabId) { lastResIndex = j; break; }
-              }
-              if (lastResIndex === -1) break;
-              const res = BulkState.results[lastResIndex];
-              if (res.status !== 'fail' && res.status !== 'partial') break;
-              
-              BulkState.results.splice(lastResIndex, 1);
-              setBulkRowMeta(tab.tabId, `Retry ${attempt}/${BulkState.MAX_RETRIES + 1}…`);
-              
-              try {
-                const td = await new Promise(r => chrome.tabs.get(tab.tabId, t => r(chrome.runtime.lastError ? null : t)));
-                if (td && (td.discarded || td.status !== 'complete')) {
-                  chrome.tabs.reload(tab.tabId, {}, () => { void chrome.runtime.lastError; });
-                  for (let w = 0; w < 24; w++) {
-                    await sleep(500);
-                    const td2 = await new Promise(r => chrome.tabs.get(tab.tabId, t => r(chrome.runtime.lastError ? null : t)));
-                    if (!td2 || td2.status === 'complete') break;
-                  }
-                  await sleep(300);
+        if ((activeDomains[host] || 0) >= MAX_PER_DOMAIN) continue;
+
+        const tab = tabs[i];
+        tab._started = true;
+        activeDomains[host] = (activeDomains[host] || 0) + 1;
+        startedAny = true;
+
+        const p = (async () => {
+          try {
+            await scrapeOneTab(tab);
+            if (!BulkState.isCancelled) {
+              for (let attempt = 2; attempt <= BulkState.MAX_RETRIES + 1; attempt++) {
+                if (BulkState.isCancelled) break;
+
+                // Small delay so scrapeOneTab can push its result before we check
+                await sleep(100);
+
+                let lastResIndex = -1;
+                for (let j = BulkState.results.length - 1; j >= 0; j--) {
+                  if (BulkState.results[j].tabId === tab.tabId) { lastResIndex = j; break; }
                 }
-              } catch (_) {}
-              
-              try {
-                await chrome.scripting.executeScript({ target: { tabId: tab.tabId }, files: ['content.js'] });
-                await sleep(300);
-              } catch (_) {}
-              
-              if (!BulkState.isCancelled) await scrapeOneTab(tab);
+                if (lastResIndex === -1) break;
+                const res = BulkState.results[lastResIndex];
+                if (res.status !== 'fail' && res.status !== 'partial') break;
+
+                BulkState.results.splice(lastResIndex, 1);
+                setBulkRowMeta(tab.tabId, `Retry ${attempt}/${BulkState.MAX_RETRIES + 1}…`);
+
+                try {
+                  const td = await new Promise(r => chrome.tabs.get(tab.tabId, t => r(chrome.runtime.lastError ? null : t)));
+                  if (td && (td.discarded || td.status !== 'complete')) {
+                    chrome.tabs.reload(tab.tabId, {}, () => { void chrome.runtime.lastError; });
+                    for (let w = 0; w < 24; w++) {
+                      await sleep(500);
+                      const td2 = await new Promise(r => chrome.tabs.get(tab.tabId, t => r(chrome.runtime.lastError ? null : t)));
+                      if (!td2 || td2.status === 'complete') break;
+                    }
+                    await sleep(300);
+                  }
+                } catch (_) {}
+
+                try {
+                  await chrome.scripting.executeScript({ target: { tabId: tab.tabId }, files: ['content.js'] });
+                  await sleep(300);
+                } catch (_) {}
+
+                if (!BulkState.isCancelled) await scrapeOneTab(tab);
+              }
             }
+
+            // ── Auto-close tab after successful scrape ──
+            if (BulkState.AUTO_CLOSE_TABS && !BulkState.isCancelled) {
+              const finalRes = BulkState.results.find(r => r.tabId === tab.tabId);
+              if (finalRes && finalRes.status === 'ok') {
+                try {
+                  chrome.tabs.remove(tab.tabId, () => { void chrome.runtime.lastError; });
+                } catch (_) {}
+              }
+            }
+          } finally {
+            activeDomains[host]--;
+            running.delete(p);
           }
-        } finally {
-          activeDomains[host]--;
-          running.delete(p);
-        }
-      })();
-      
-      running.add(p);
-      while (cursor < tabs.length && tabs[cursor]._started) cursor++;
+        })();
+
+        running.add(p);
+      }
     }
-    
+
     if (running.size > 0) {
+      // Wait for at least one worker to finish before re-filling slots
       await Promise.race(running);
+    } else if (hasUnstarted()) {
+      // All slots blocked by domain limits but tabs remain — wait briefly and retry
+      await sleep(200);
     } else {
-      break;
+      break; // truly done
     }
     await sleep(50);
   }
@@ -3796,13 +4074,13 @@ async function scrapeOneTab(tabInfo) {
         chrome.tabs.reload(tabInfo.tabId, {}, () => { void chrome.runtime.lastError; });
       }
       if (tabDetails.discarded || tabDetails.status !== 'complete') {
-        for (let i = 0; i < 20; i++) { // was 60 (30s max) → 20 (10s max)
+        for (let i = 0; i < 20; i++) { // 20 × 300ms = 6s max wait
           if (BulkState.isCancelled) { setBulkRowStatus(tabInfo.tabId, 'fail', { error: 'cancelled' }); return; }
           tabDetails = await new Promise(resolve => chrome.tabs.get(tabInfo.tabId, t => resolve(chrome.runtime.lastError ? null : t)));
           if (!tabDetails || tabDetails.status === 'complete') break;
-          await sleep(500);
+          await sleep(300); // was 500ms
         }
-        if (tabDetails) await sleep(500);
+        if (tabDetails) await sleep(300); // was 500ms
       }
     }
 
@@ -4368,7 +4646,7 @@ async function imageDownloadPhase() {
   updateBulkProgressTitle(`📷 Downloading images for ${pending.length} products…`);
 
   let cursor = 0;
-  const CONCUR = 2; // 2 parallel FETCH_BASE64_BATCH calls (safer for network congestion)
+  const CONCUR = 4; // 4 parallel image batches (was 2) — 2x faster image phase
 
   const workers = Array.from({ length: CONCUR }, async () => {
     while (cursor < pending.length && !BulkState.isCancelled) {
@@ -5042,10 +5320,10 @@ function buildFilename(ext, suffix = '') {
 // All possible columns. `defaultOn` matches background.js DEFAULT_DATA.settings.bulkSheetColumns.
 const ALL_BULK_COLS = [
   { key: 'no',          label: '#'              },
-  { key: 'title',       label: 'Title'          },  // hyperlink to URL
-  { key: 'url',         label: 'Source URL'     },  // hyperlink
+  { key: 'title',       label: 'Tital'          },  // hyperlink to URL
+  { key: 'url',         label: 'Soursing link'  },  // hyperlink
   { key: 'platform',    label: 'Platform'       },
-  { key: 'price',       label: 'Source Price'   },  // numeric
+  { key: 'price',       label: 'Price'          },  // numeric
   { key: 'labelCost',   label: 'Label Cost'     },  // empty for user
   { key: 'listPrice',   label: 'List Price'     },  // empty for user
   { key: 'profit',      label: 'Profit'         },  // formula
@@ -5074,20 +5352,37 @@ const ALL_BULK_COLS = [
 ];
 
 // Columns that are OFF by default (must be explicitly enabled by user)
+// Default sheet has only 3 columns: Title, Sourcing Link, Price
 const OPT_IN_COLS = new Set([
+  'no', 'platform', 'labelCost', 'listPrice', 'profit',
+  'weight', 'dimL', 'dimW', 'dimH', 'variants',
+  'imageCount', 'videoCount', 'videoUrl',
   'img1','img2','img3','img4','img5','img6','img7','img8','img9','img10',
-  'videoUrl','weight','dimL','dimW','dimH'
+  'description', 'tags', 'status', 'scrapedAt'
 ]);
+
+// Columns ON by default (everything else is OFF unless user enables it)
+const DEFAULT_ON_COLS = new Set(['title', 'url', 'price']);
 
 function getEnabledColumns() {
   const prefs = State.data?.settings?.bulkSheetColumns || {};
   const customCols = State.data?.settings?.customBulkColumns || [];
   const fullCols = [...ALL_BULK_COLS, ...customCols];
+  const hasSavedPrefs = Object.keys(prefs).length > 0;
+
   const enabled = fullCols.filter(c => {
-    if (OPT_IN_COLS.has(c.key)) return prefs[c.key] === true;  // must be explicitly ON
-    return prefs[c.key] !== false;                              // default ON unless explicitly disabled
+    if (hasSavedPrefs) {
+      // User has explicitly saved prefs — respect them
+      if (prefs[c.key] === true)  return true;
+      if (prefs[c.key] === false) return false;
+      // Not in prefs yet → use default
+    }
+    // No prefs saved → only default 3 ON
+    return DEFAULT_ON_COLS.has(c.key);
   });
-  return enabled.length ? enabled : fullCols.filter(c => !OPT_IN_COLS.has(c.key));
+
+  // Safety: always return at least title, url, price
+  return enabled.length ? enabled : fullCols.filter(c => DEFAULT_ON_COLS.has(c.key));
 }
 
 // Spreadsheet column letter from 0-based index. 0 → A, 25 → Z, 26 → AA
@@ -5144,9 +5439,7 @@ function buildRichSheetData(rows) {
     const cellsByKey = {};
 
     cellsByKey.no       = { value: rowIdx + 1 };
-    cellsByKey.title    = r.title
-      ? { value: r.title, hyperlink: r.url || null }
-      : { value: '' };
+    cellsByKey.title    = { value: r.title || '' };  // plain text, no hyperlink
     cellsByKey.url      = r.url
       ? { value: r.url, hyperlink: r.url, type: 'url' }
       : { value: '' };
@@ -5258,13 +5551,13 @@ function downloadXlsxRich(rich, filename) {
       if (ri === 0) {
         ws[ref].s = {
           font:      { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 },
-          fill:      { fgColor: { rgb: '0E7490' } },
+          fill:      { fgColor: { rgb: '00B050' } },
           alignment: { horizontal: 'center', vertical: 'center' },
           border: {
-            top:    { style: 'medium', color: { rgb: '06B6D4' } },
-            bottom: { style: 'medium', color: { rgb: '06B6D4' } },
-            left:   { style: 'thin',   color: { rgb: '0E7490' } },
-            right:  { style: 'thin',   color: { rgb: '0E7490' } },
+            top:    { style: 'medium', color: { rgb: '00B050' } },
+            bottom: { style: 'medium', color: { rgb: '00B050' } },
+            left:   { style: 'thin',   color: { rgb: '00B050' } },
+            right:  { style: 'thin',   color: { rgb: '00B050' } },
           }
         };
         return;
@@ -5281,7 +5574,7 @@ function downloadXlsxRich(rich, filename) {
       if (cell.formula) { ws[ref].f = cell.formula; ws[ref].t = 'n'; }
 
       if (cell.type === 'price') {
-        ws[ref].z = '"$"#,##0.00';
+        ws[ref].z = '#,##0.00';   // no currency symbol
         ws[ref].s.alignment = { horizontal: 'right' };
       }
 
@@ -5308,10 +5601,8 @@ function downloadXlsxRich(rich, filename) {
   ws['!cols'] = widths;
   ws['!views'] = [{ state: 'frozen', ySplit: 1, xSplit: 0, topLeftCell: 'A2' }];
 
-  if (rich.aoa.length > 1) {
-    const lastCol = colLetter(rich.aoa[0].length - 1);
-    ws['!autofilter'] = { ref: 'A1:' + lastCol + '1' };
-  }
+
+
 
   const wb = XLSX.utils.book_new();
   wb.Props = { Title: 'ZHunter PRO Catalog', Subject: 'Product hunt export', Author: 'ZHunter PRO', CreatedDate: new Date() };

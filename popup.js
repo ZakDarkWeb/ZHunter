@@ -3816,6 +3816,8 @@ const BulkState = {
 
 const HUNT_STATE_KEY = 'zhunterHuntState'; // for auto-resume
 
+const BULK_QUEUE_KEY = 'zhunterBulkQueue'; // persistent queue of URLs to hunt sequentially
+
 const MASTER_KEY  = 'zhunterMasterSheet';
 const BATCHES_KEY = 'zhunterMasterBatches';
 
@@ -3872,27 +3874,412 @@ function initBulkTab() {
     downloadPdfCatalog(rows, 'Bulk Hunt Catalog');
   });
 
+  // ── Queue view buttons
+  $('bulkViewQueueBtn')?.addEventListener('click', () => switchBulkView('queue'));
+  $('queueAddBtn')?.addEventListener('click', onQueueAddUrl);
+  $('queueAddInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') onQueueAddUrl(); });
+  $('queueSelectAllBtn')?.addEventListener('click',   () => toggleAllQueue(true));
+  $('queueDeselectAllBtn')?.addEventListener('click', () => toggleAllQueue(false));
+  $('queueClearDoneBtn')?.addEventListener('click',   clearHuntedQueueItems);
+  $('queueClearAllBtn')?.addEventListener('click',    clearAllQueue);
+  $('bulkQueueHuntBtn')?.addEventListener('click',    startQueueHunt);
+
+  // Auto-capture toggle — persist setting to storage
+  $('queueAutoCaptureToggle')?.addEventListener('change', e => {
+    msg({ action: 'GET_DATA' }).then(d => {
+      const settings = d?.settings || {};
+      settings.bulkQueueAutoCapture = e.target.checked;
+      msg({ action: 'UPDATE_SETTINGS', settings });
+    });
+  });
+
+  // Live-refresh queue list when background auto-captures a new URL
+  chrome.runtime.onMessage.addListener((m) => {
+    if (m?.action === 'BULK_QUEUE_UPDATED' && BulkState.view === 'queue') loadBulkQueue();
+  });
+
   // Auto-refresh tab list when Bulk tab is opened
   document.querySelector('[data-tab="bulk"]')?.addEventListener('click', () => {
-    if (BulkState.view === 'tabs') loadBulkTabs();
+    if (BulkState.view === 'tabs')   loadBulkTabs();
+    else if (BulkState.view === 'queue') loadBulkQueue();
     else updateMasterStats();
   });
 
   // Initial load
   loadBulkTabs();
+  loadBulkQueue();
   updateMasterStats();
   checkPendingHunt(); // Show resume banner if a hunt was interrupted
+  // Sync auto-capture toggle from settings
+  msg({ action: 'GET_DATA' }).then(d => {
+    const v = d?.settings?.bulkQueueAutoCapture;
+    const chk = $('queueAutoCaptureToggle');
+    if (chk && v !== undefined) chk.checked = !!v;
+  });
 }
 
 function switchBulkView(view) {
   BulkState.view = view;
-  $('bulkViewTabsBtn').classList.toggle('active',   view === 'tabs');
-  $('bulkViewMasterBtn').classList.toggle('active', view === 'master');
-  $('bulkTabsView').classList.toggle('active',   view === 'tabs');
-  $('bulkMasterView').classList.toggle('active', view === 'master');
+  $('bulkViewTabsBtn')?.classList.toggle('active',   view === 'tabs');
+  $('bulkViewQueueBtn')?.classList.toggle('active',  view === 'queue');
+  $('bulkViewMasterBtn')?.classList.toggle('active', view === 'master');
+  $('bulkTabsView')?.classList.toggle('active',   view === 'tabs');
+  $('bulkQueueView')?.classList.toggle('active',  view === 'queue');
+  $('bulkMasterView')?.classList.toggle('active', view === 'master');
   if (view === 'tabs')   loadBulkTabs();
+  if (view === 'queue')  loadBulkQueue();
   if (view === 'master') updateMasterStats();
 }
+
+// ══════════════════════════════════════════════════════════════
+// BULK QUEUE — persistent URL queue + sequential hunt
+// ══════════════════════════════════════════════════════════════
+
+// In-memory state for the queue panel
+const QueueState = {
+  items: []  // [{ id, url, title, platform, addedAt, checked, hunted }]
+};
+
+// ── Load queue from storage and render
+async function loadBulkQueue() {
+  try {
+    const res = await msg({ action: 'GET_BULK_QUEUE' });
+    QueueState.items = res?.queue || [];
+    renderBulkQueueList();
+  } catch (e) {
+    toast('Failed to load queue', 'err');
+  }
+}
+
+// ── Render the queue list UI
+function renderBulkQueueList() {
+  const list = $('bulkQueueList');
+  if (!list) return;
+
+  const items = QueueState.items;
+  if (items.length === 0) {
+    list.innerHTML = `
+      <div class="bulk-empty">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 9h6M9 12h6M9 15h4"/></svg>
+        <p>Queue is empty — browse product pages<br>or paste a URL above to add them.</p>
+      </div>`;
+    updateQueueSummary();
+    return;
+  }
+
+  list.innerHTML = '';
+  items.forEach(item => {
+    const isChecked = !!item.checked;
+    const isHunted  = !!item.hunted;
+    const platLabel = item.platform
+      ? `<span class="bulk-tab-platform">${esc(item.platform.substring(0,3).toUpperCase())}</span>`
+      : `<span class="bulk-tab-platform unknown">?</span>`;
+    const huntedBadge = isHunted ? `<span class="bulk-tab-dup-badge" title="Already hunted">✅</span>` : '';
+    const shortUrl = (() => { try { const u = new URL(item.url); return u.hostname.replace(/^www\./, '') + u.pathname.slice(0, 35); } catch { return item.url.slice(0, 50); } })();
+
+    const row = document.createElement('div');
+    row.className = 'bulk-tab-row' + (isChecked ? ' checked' : '') + (isHunted ? ' duplicate' : '');
+    row.dataset.queueId = item.id;
+    row.innerHTML = `
+      <div class="bulk-tab-checkbox"></div>
+      ${platLabel}
+      <div class="bulk-tab-info">
+        <div class="bulk-tab-platform-lbl">${esc(item.title ? trunc(item.title, 50) : shortUrl)}${huntedBadge}</div>
+        <div class="bulk-tab-title" style="opacity:.55;font-size:10px">${esc(shortUrl)}</div>
+      </div>
+      <button class="queue-remove-btn" data-id="${esc(item.id)}" title="Remove from queue"
+        style="margin-left:auto;flex-shrink:0;background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:14px;line-height:1;padding:2px 4px">×</button>`;
+
+    // Toggle checked state on row click (not on the remove btn)
+    row.addEventListener('click', e => {
+      if (e.target.closest('.queue-remove-btn')) return;
+      item.checked = !item.checked;
+      saveBulkQueue();
+      renderBulkQueueList();
+    });
+
+    // Remove button
+    row.querySelector('.queue-remove-btn').addEventListener('click', e => {
+      e.stopPropagation();
+      removeQueueItem(item.id);
+    });
+
+    list.appendChild(row);
+  });
+  updateQueueSummary();
+}
+
+// ── Update queue count + ETA display
+function updateQueueSummary() {
+  const checked = QueueState.items.filter(i => i.checked && !i.hunted).length;
+  const total   = QueueState.items.length;
+  const cnt = $('bulkQueueCount');
+  const eta = $('bulkQueueEta');
+  const btn = $('bulkQueueHuntBtn');
+  if (cnt) cnt.textContent = `${total} queued (✓ ${checked} selected)`;
+  if (eta) {
+    if (checked === 0) { eta.textContent = ''; }
+    else {
+      // ~8s per item (sequential: open + load + scrape + close)
+      const sec = checked * 8;
+      const m = Math.floor(sec / 60), s = sec % 60;
+      eta.textContent = '~' + (m ? m + 'm ' : '') + s + 's estimated';
+    }
+  }
+  if (btn) btn.disabled = (checked === 0 || BulkState.isHunting);
+}
+
+// ── Persist queue to storage
+function saveBulkQueue() {
+  msg({ action: 'UPDATE_BULK_QUEUE', queue: QueueState.items }).catch(() => {});
+}
+
+// ── Remove a single item from the queue
+function removeQueueItem(id) {
+  QueueState.items = QueueState.items.filter(i => i.id !== id);
+  saveBulkQueue();
+  renderBulkQueueList();
+}
+
+// ── Check/uncheck all items
+function toggleAllQueue(selectAll) {
+  QueueState.items.forEach(i => { i.checked = selectAll; });
+  saveBulkQueue();
+  renderBulkQueueList();
+}
+
+// ── Clear items that have already been hunted
+function clearHuntedQueueItems() {
+  QueueState.items = QueueState.items.filter(i => !i.hunted);
+  saveBulkQueue();
+  renderBulkQueueList();
+}
+
+// ── Clear entire queue
+function clearAllQueue() {
+  QueueState.items = [];
+  saveBulkQueue();
+  renderBulkQueueList();
+}
+
+// ── Handle paste-URL add
+function onQueueAddUrl() {
+  const input = $('queueAddInput');
+  const raw = (input?.value || '').trim();
+  if (!raw) return;
+  let normUrl;
+  try { normUrl = new URL(raw).href.split('#')[0]; } catch { toast('Invalid URL', 'err'); return; }
+  const platform = detectTabPlatform(normUrl);
+  msg({ action: 'ADD_TO_BULK_QUEUE', url: normUrl, title: normUrl, platform: platform?.name || null })
+    .then(res => {
+      if (res?.success) {
+        if (input) input.value = '';
+        loadBulkQueue();
+        toast('Added to queue', 'ok');
+      } else if (res?.reason === 'duplicate') {
+        toast('Already in queue', 'warn');
+      } else {
+        toast('Failed to add URL', 'err');
+      }
+    }).catch(() => toast('Failed to add URL', 'err'));
+}
+
+// ══════════════════════════════════════════════════════════════
+// SEQUENTIAL QUEUE HUNT
+// ══════════════════════════════════════════════════════════════
+
+// ── Scrape a single queue item by opening a tab, scraping, then closing it.
+// Uses queueItem.id as the fake tabId for progress row tracking.
+async function scrapeQueueItem(queueItem) {
+  const fakeId = queueItem.id;
+  setBulkRowStatus(fakeId, 'active');
+
+  if (BulkState.isCancelled) { setBulkRowStatus(fakeId, 'fail'); return; }
+
+  let newTab = null;
+  let scraped = null;
+
+  try {
+    // Open a new background tab for this URL
+    newTab = await chrome.tabs.create({ url: queueItem.url, active: false });
+    const realTabId = newTab.id;
+
+    setBulkRowMeta(fakeId, 'Loading page…');
+
+    // Poll for tab complete (up to 12s)
+    for (let i = 0; i < 60; i++) {
+      if (BulkState.isCancelled) break;
+      await sleep(200);
+      try {
+        const t = await new Promise(r => chrome.tabs.get(realTabId, t2 => r(chrome.runtime.lastError ? null : t2)));
+        if (!t || t.status === 'complete') break;
+      } catch { break; }
+    }
+
+    if (BulkState.isCancelled) { setBulkRowStatus(fakeId, 'fail'); return; }
+
+    // For lazy-loaded platforms, briefly activate the tab so they render
+    const isLazy = /faire\.com|samsclub\.com|amazon\.|walmart\.com/i.test(queueItem.url);
+    if (isLazy) {
+      try {
+        await chrome.tabs.update(realTabId, { active: true });
+        await sleep(1200);
+        await chrome.tabs.update(realTabId, { active: false });
+      } catch {}
+    }
+
+    setBulkRowMeta(fakeId, 'Injecting…');
+
+    // Inject content script (idempotent via __zhunterContentLoaded guard)
+    try {
+      await chrome.scripting.executeScript({ target: { tabId: realTabId }, files: ['content.js'] });
+    } catch {}
+    await sleep(200);
+
+    setBulkRowMeta(fakeId, 'Scraping…');
+
+    // Send scrape message with 15s timeout
+    scraped = await new Promise(resolve => {
+      let done = false;
+      const finish = v => { if (!done) { done = true; resolve(v); } };
+      const t = setTimeout(() => finish(null), 15000);
+      try {
+        chrome.tabs.sendMessage(realTabId, { action: 'SCRAPE_PAGE' }, res => {
+          clearTimeout(t);
+          if (chrome.runtime.lastError || !res?.success || !res?.data) finish(null);
+          else finish(res.data);
+        });
+      } catch { clearTimeout(t); finish(null); }
+    });
+
+  } catch (err) {
+    // swallow — handled in finally
+  } finally {
+    if (newTab?.id) { try { await chrome.tabs.remove(newTab.id); } catch {} }
+  }
+
+  // Determine status
+  let status;
+  if (!scraped) {
+    status = 'fail';
+  } else if (!scraped.title && (!scraped.images || !scraped.images.length) && !scraped.price) {
+    status = 'partial';
+  } else {
+    status = 'ok';
+  }
+
+  const resultItem = {
+    tabId:       fakeId,
+    url:         scraped?.url || queueItem.url,
+    title:       scraped?.title || queueItem.title || queueItem.url,
+    price:       scraped?.price || '',
+    platform:    typeof queueItem.platform === 'string' ? queueItem.platform : (queueItem.platform?.name || 'Other'),
+    images:      scraped?.images || [],
+    imagesBase64: [],
+    videos:      scraped?.videos || [],
+    variants:    scraped?.variants || [],
+    description: scraped?.description || '',
+    status,
+    error:       status === 'fail' ? 'no_response' : '',
+    scrapedAt:   new Date().toISOString()
+  };
+
+  BulkState.results.push(resultItem);
+  if (status !== 'fail') BulkState.pendingFlush.push(resultItem);
+
+  // Mark item as hunted in queue
+  const qi = QueueState.items.find(i => i.id === fakeId);
+  if (qi) qi.hunted = true;
+
+  setBulkRowStatus(fakeId, status, { images: 0, error: resultItem.error });
+  updateBulkProgressBar();
+}
+
+// ── Process all checked queue items sequentially (one tab at a time)
+async function processQueueSequential(items) {
+  for (const item of items) {
+    if (BulkState.isCancelled) break;
+    while (BulkState.isPaused && !BulkState.isCancelled) await sleep(300);
+    await scrapeQueueItem(item);
+  }
+}
+
+// ── Main entry point: start hunting the queue
+async function startQueueHunt() {
+  if (BulkState.isHunting) return;
+
+  const toHunt = QueueState.items.filter(i => i.checked && !i.hunted);
+  if (toHunt.length === 0) { toast('No items selected in queue', 'warn'); return; }
+
+  BulkState.isHunting   = true;
+  BulkState.isPaused    = false;
+  BulkState.isCancelled = false;
+  BulkState.results     = [];
+  BulkState.pendingFlush  = [];
+  BulkState._flushActive  = false;
+  BulkState.currentBatchId = `queue_${Date.now()}`;
+  BulkState.huntStartTime  = Date.now();
+
+  // Build fake tabInfo list for the progress modal
+  // (tabId = queueItem.id so progress rows are keyed by queue ID)
+  const fakeTabs = toHunt.map(i => ({
+    tabId:    i.id,
+    url:      i.url,
+    title:    i.title || i.url,
+    platform: typeof i.platform === 'string'
+      ? { name: i.platform, tag: i.platform.substring(0, 3).toUpperCase() }
+      : (i.platform ? { name: i.platform, tag: String(i.platform).substring(0, 3).toUpperCase() } : null)
+  }));
+
+  openBulkProgressModal(fakeTabs);
+  $('bulkQueueHuntBtn').disabled = true;
+
+  // Save for auto-resume (reuse existing mechanism)
+  await savePendingHunt(fakeTabs);
+
+  // Keep service worker alive
+  msg({ action: 'START_KEEPALIVE' }).catch(() => {});
+
+  // Start flush loop (same as existing startBulkHunt)
+  const flushLoop = async () => {
+    BulkState._flushActive = true;
+    while (BulkState.isHunting || BulkState.pendingFlush.length > 0) {
+      if (BulkState.pendingFlush.length > 0) {
+        const rows = BulkState.pendingFlush.splice(0, 50);
+        await appendToMasterSheet(rows);
+      } else {
+        await sleep(500);
+      }
+    }
+    BulkState._flushActive = false;
+  };
+  flushLoop();
+
+  try {
+    updateBulkProgressTitle(`🚀 Processing ${toHunt.length} queued items…`);
+    await processQueueSequential(toHunt); // Phase 1: sequential scrape
+
+    // Phase 2: download images concurrently (same as existing bulk hunt)
+    if (!BulkState.isCancelled) {
+      await imageDownloadPhase();
+    }
+  } catch (e) {
+    toast('Queue hunt error: ' + (e?.message || 'unknown'), 'err');
+  }
+
+  BulkState.isHunting = false;
+  // Wait for flush loop
+  const flushDeadline = Date.now() + 10000;
+  while (BulkState._flushActive && Date.now() < flushDeadline) await sleep(100);
+  BulkState._flushActive = false;
+
+  // Persist hunted flags and refresh queue
+  saveBulkQueue();
+  await clearPendingHunt();
+  finishBulkHunt();
+  loadBulkQueue(); // Refresh queue panel
+}
+
 
 // ── Strip transient browser-tab states that are NOT product titles ──────────
 function cleanTabTitle(raw) {

@@ -282,9 +282,10 @@
         </div>
       </div>
 
-      <!-- View switcher: Tabs view / Master Sheet view -->
+      <!-- View switcher: Tabs view / Queue view / Master Sheet view -->
       <div class="bulk-toggle-row">
         <button id="bulkViewTabsBtn"   class="bulk-toggle active" type="button">📋 Open Tabs</button>
+        <button id="bulkViewQueueBtn"  class="bulk-toggle"        type="button">🗂️ Queue</button>
         <button id="bulkViewMasterBtn" class="bulk-toggle"        type="button">📚 Master Sheet</button>
       </div>
 
@@ -338,8 +339,56 @@
             <span class="bulk-main-icon">⚡</span>
             <span class="bulk-main-text">Hunt Selected Tabs</span>
           </button>
+          <label class="bulk-queue-autocap" title="Automatically close each tab after its data is fetched — frees memory and speeds up remaining tabs" style="margin-top:6px;justify-content:center">
+            <input type="checkbox" id="bulkAutoCloseToggle">
+            <span>Auto-close tab after hunt</span>
+          </label>
         </div>
-      </div>
+      </div><!-- /bulkTabsView -->
+
+      <!-- ── VIEW 3: Bulk Queue ── -->
+      <div id="bulkQueueView" class="bulk-view">
+
+        <!-- Auto-capture toggle + paste URL bar -->
+        <div class="bulk-queue-topbar">
+          <label class="bulk-queue-autocap" title="Automatically add product pages to queue as you browse">
+            <input type="checkbox" id="queueAutoCaptureToggle" checked>
+            <span>Auto-capture</span>
+          </label>
+          <div class="bulk-queue-add-row">
+            <input id="queueAddInput" class="bulk-queue-input" type="url" placeholder="Paste product URL…" autocomplete="off">
+            <button id="queueAddBtn" class="btn btn-ghost-sm" type="button">Add</button>
+          </div>
+        </div>
+
+        <!-- Queue action buttons -->
+        <div class="bulk-actions-row">
+          <button id="queueSelectAllBtn"   class="btn btn-ghost-sm" type="button">Select All</button>
+          <button id="queueDeselectAllBtn" class="btn btn-ghost-sm" type="button">None</button>
+          <button id="queueClearDoneBtn"   class="btn btn-ghost-sm" type="button">Clear Hunted</button>
+          <button id="queueClearAllBtn"    class="btn btn-ghost-sm btn-danger" type="button" style="margin-left:auto">Clear All</button>
+        </div>
+
+        <!-- Queue list -->
+        <div id="bulkQueueList" class="bulk-tabs-list">
+          <div class="bulk-empty">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 9h6M9 12h6M9 15h4"/></svg>
+            <p>Queue is empty — browse product pages<br>or paste a URL above to add them.</p>
+          </div>
+        </div>
+
+        <!-- Queue summary + Hunt button -->
+        <div class="bulk-summary" id="bulkQueueSummary">
+          <span id="bulkQueueCount">0 queued</span>
+          <span id="bulkQueueEta"></span>
+        </div>
+        <div class="hunt-zone-border">
+          <button id="bulkQueueHuntBtn" class="btn-bulk-main" type="button" disabled>
+            <span class="bulk-main-icon">🚀</span>
+            <span class="bulk-main-text">Hunt Queue</span>
+          </button>
+        </div>
+      </div><!-- /bulkQueueView -->
 
       <!-- ── VIEW 2: Master Sheet ── -->
       <div id="bulkMasterView" class="bulk-view">

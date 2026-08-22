@@ -1,45 +1,45 @@
 /* ============================================================
-   ZHunter PRO v8.0 — Complete Stylesheet PREMIUM EDITION
+   ZHunter PRO v8.0 â€” Complete Stylesheet PREMIUM EDITION
    Major upgrade: Brighter cyan palette, richer depth,
    premium glassmorphism, advanced micro-animations,
    high-contrast surfaces, neon glow effects.
    ============================================================ */
 
-/* ── CSS Variables — UPGRADED PALETTE ────────────────────────── */
+/* â”€â”€ CSS Variables â€” UPGRADED PALETTE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 :root {
-  /* ── Brand — Bright Electric Cyan ── */
+  /* â”€â”€ Brand â€” Bright Electric Cyan â”€â”€ */
   --color-brand-primary:   #00e5ff;   /* vivid electric cyan */
   --color-brand-secondary: #67e8f9;   /* bright sky tint */
   --color-brand-accent:    #00cfff;   /* classic accent */
 
-  /* ── Backgrounds — Rich Deep Blue-Black ── */
+  /* â”€â”€ Backgrounds â€” Rich Deep Blue-Black â”€â”€ */
   --bg-base:      #03060f;            /* near-black with deep blue */
   --bg-surface:   #060d1e;            /* surface with subtle blue */
-  --bg-card:      #0a1428;            /* card — deep sapphire */
+  --bg-card:      #0a1428;            /* card â€” deep sapphire */
   --bg-elevated:  #0f1e3a;            /* elevated element */
   --bg-hover:     #162545;            /* hover state */
   --bg-input:     #080f22;            /* input background */
   --bg-overlay:   rgba(2, 5, 15, 0.94);
 
-  /* ── Borders ── */
+  /* â”€â”€ Borders â”€â”€ */
   --bd:           #1a2a4a;            /* subtle blue border */
   --bd-light:     #1f3360;            /* slightly lighter border */
   --bd-theme:     rgba(0, 229, 255, 0.38);
 
-  /* ── Theme Tokens ── */
-  --theme:        #00e5ff;            /* primary accent — electric cyan */
+  /* â”€â”€ Theme Tokens â”€â”€ */
+  --theme:        #00e5ff;            /* primary accent â€” electric cyan */
   --theme-dark:   #0ea5e9;            /* darker variant */
   --theme-light:  #67e8f9;            /* lighter variant */
   --theme-soft:   rgba(0, 229, 255, 0.10);
   --theme-glow:   rgba(0, 229, 255, 0.42);
   --theme-text:   #bae6fd;
 
-  /* ── White accent ── */
+  /* â”€â”€ White accent â”€â”€ */
   --cy:           #ffffff;
   --cy-soft:      rgba(255, 255, 255, 0.05);
   --cy-border:    rgba(255, 255, 255, 0.14);
 
-  /* ── Semantic Colors ── */
+  /* â”€â”€ Semantic Colors â”€â”€ */
   --red:          #f87171;
   --red-dark:     #dc2626;
   --red-soft:     rgba(248, 113, 113, 0.12);
@@ -76,14 +76,14 @@
   --color-pro:     #fbbf24;
   --color-pro-glow: rgba(251, 191, 36, 0.18);
 
-  /* ── Text ── */
-  --tx-1:     #f0f9ff;                /* brightest — primary text */
-  --tx-2:     #bae6fd;                /* secondary — has cyan tint */
-  --tx-3:     #7dd3fc;                /* tertiary — light cyan */
+  /* â”€â”€ Text â”€â”€ */
+  --tx-1:     #f0f9ff;                /* brightest â€” primary text */
+  --tx-2:     #bae6fd;                /* secondary â€” has cyan tint */
+  --tx-3:     #7dd3fc;                /* tertiary â€” light cyan */
   --tx-4:     #3b6a8a;                /* muted */
   --tx-theme: var(--theme-text);
 
-  /* ── Shadows + Glows ── */
+  /* â”€â”€ Shadows + Glows â”€â”€ */
   --sh-sm:    0 2px 12px rgba(0, 0, 0, 0.45);
   --sh-md:    0 8px 32px rgba(0, 0, 0, 0.55);
   --sh-lg:    0 16px 64px rgba(0, 0, 0, 0.70);
@@ -91,7 +91,7 @@
   --sh-glow:  0 0 24px rgba(0, 229, 255, 0.25);
   --sh-glow-strong: 0 0 36px rgba(0, 229, 255, 0.55);
 
-  /* ── Radii ── */
+  /* â”€â”€ Radii â”€â”€ */
   --r-xs:   3px;
   --r-sm:   8px;
   --r-md:   12px;
@@ -99,31 +99,31 @@
   --r-xl:   24px;
   --r-pill: 9999px;
 
-  /* ── Transitions — premium spring curves ── */
+  /* â”€â”€ Transitions â€” premium spring curves â”€â”€ */
   --t-fast:   0.12s cubic-bezier(0.4, 0, 0.2, 1);
   --t-norm:   0.24s cubic-bezier(0.2, 0.9, 0.3, 1);
   --t-slow:   0.44s cubic-bezier(0.2, 0.9, 0.3, 1);
   --t-spring: 0.50s cubic-bezier(0.2, 1.25, 0.4, 1);
   --t-bounce: 0.60s cubic-bezier(0.34, 1.56, 0.64, 1);
 
-  /* ── Layout ── */
+  /* â”€â”€ Layout â”€â”€ */
   --popup-w:      468px;
   --popup-h:      600px;
   --header-h:     64px;
   --nav-h:        46px;
   --panel-max-h:  calc(var(--popup-h) - var(--header-h) - var(--nav-h));
 
-  /* ── Font ── */
+  /* â”€â”€ Font â”€â”€ */
   --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 
-  /* ── Premium Extras ── */
+  /* â”€â”€ Premium Extras â”€â”€ */
   --motion-spring:  cubic-bezier(0.2, 1.1, 0.3, 1);
   --gradient-main:  linear-gradient(135deg, #00e5ff 0%, #67e8f9 50%, #0ea5e9 100%);
   --gradient-card:  linear-gradient(145deg, rgba(15, 30, 58, 0.95), rgba(8, 15, 34, 0.98));
   --noise-overlay:  url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
 }
 
-/* ── Light Mode — Google/Apple clean white professional ───── */
+/* â”€â”€ Light Mode â€” Google/Apple clean white professional â”€â”€â”€â”€â”€ */
 body.light-mode {
   --bg-base:      #ffffff;
   --bg-surface:   #f5f5f7;
@@ -181,7 +181,7 @@ body.light-mode {
   --sh-glow-strong: 0 0 0 3px rgba(0, 160, 192, 0.22);
 }
 
-/* ── Reset ──────────────────────────────────────────────────── */
+/* â”€â”€ Reset â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 *,
 *::before,
 *::after {
@@ -209,7 +209,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* FIXED: No universal transition override — only theme elements */
+/* FIXED: No universal transition override â€” only theme elements */
 body.theme-switching,
 body.theme-switching * {
   transition:
@@ -229,7 +229,7 @@ body.theme-switching * {
 ::-webkit-scrollbar-thumb:hover { background: var(--theme); }
 ::selection { background: var(--theme-soft); color: var(--tx-theme); }
 
-/* ── Ripple ─────────────────────────────────────────────────── */
+/* â”€â”€ Ripple â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .ripple {
   position: absolute;
   border-radius: 50%;
@@ -256,7 +256,7 @@ body.theme-switching * {
   overflow: hidden;
 }
 
-/* ── Header ─────────────────────────────────────────────────── */
+/* -- Header ------------------------------------------------- */
 .app-header {
   display: flex;
   align-items: center;
@@ -456,7 +456,7 @@ body.light-mode .icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
   transform: scale(1.05);
 }
 
-/* ── Tab Navigation ─────────────────────────────────────────── */
+/* â”€â”€ Tab Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .tab-nav {
   display: flex;
   background: var(--bg-surface);
@@ -526,7 +526,7 @@ body.light-mode .icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
   border-radius: 4px;
 }
 
-/* ── Tab Panels ─────────────────────────────────────────────── */
+/* â”€â”€ Tab Panels â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .tab-panel {
   display: none;
   overflow: hidden;
@@ -542,7 +542,7 @@ body.light-mode .icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Collect Tab ─────────────────────────────────────────────── */
+/* â”€â”€ Collect Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .collect-scroll {
   flex: 1;
   overflow-y: auto;
@@ -587,7 +587,7 @@ body.light-mode .icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
   font-size: 10px;
 }
 
-/* ── Hunt Button — IMPROVED with scanner pulse ─────────────── */
+/* â”€â”€ Hunt Button â€” IMPROVED with scanner pulse â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .hunt-zone {
   padding: 12px 14px 4px;
 }
@@ -627,7 +627,7 @@ body.light-mode .icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
   pointer-events: none;
 }
 
-/* Scanner icon — pulsing glow when idle */
+/* Scanner icon â€” pulsing glow when idle */
 .hunt-icon {
   display: flex;
   align-items: center;
@@ -669,7 +669,7 @@ body.light-mode .icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
   50%       { box-shadow: 0 0 0 5px rgba(6, 182, 212, 0); }
 }
 
-/* ── Inputs ─────────────────────────────────────────────────── */
+/* â”€â”€ Inputs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .inp {
   width: 100%;
   padding: 9px 12px;
@@ -776,7 +776,7 @@ body.light-mode .icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
   outline-offset: 2px;
 }
 
-/* ── Category Badge ─────────────────────────────────────────── */
+/* â”€â”€ Category Badge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cat-badge {
   display: flex;
   align-items: center;
@@ -794,7 +794,7 @@ body.light-mode .icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
   text-overflow: ellipsis;
 }
 
-/* ── Category Color Classes — FIXED: no !important ─────────── */
+/* â”€â”€ Category Color Classes â€” FIXED: no !important â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cc-amazon     { background: rgba(255, 153,  0, 0.12); color: #fbbf24;  border-color: rgba(255, 153,  0, 0.28); }
 .cc-youtube    { background: rgba(255,  50, 50, 0.12); color: #ef4444;  border-color: rgba(255,  50, 50, 0.28); }
 .cc-github     { background: rgba(110, 231,183, 0.12); color: #10b981;  border-color: rgba(110, 231,183, 0.22); }
@@ -811,7 +811,7 @@ body.light-mode .icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
 .cc-daraz      { background: rgba(242, 108,  0, 0.12); color: #fb923c;  border-color: rgba(242, 108,  0, 0.28); }
 .cc-default    { background: var(--theme-soft);         color: var(--tx-theme); border-color: var(--theme-glow); }
 
-/* ── Multi-Image Grid ───────────────────────────────────────── */
+/* â”€â”€ Multi-Image Grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .images-grid {
   display: flex;
   flex-wrap: wrap;
@@ -921,7 +921,7 @@ body.light-mode .icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
   color: var(--tx-4);
 }
 
-/* ── Video Preview ──────────────────────────────────────────── */
+/* â”€â”€ Video Preview â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .video-preview {
   background: var(--bg-input);
   border: 1px solid var(--bd-light);
@@ -984,7 +984,7 @@ body.light-mode .icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
   text-overflow: ellipsis;
 }
 
-/* ── Tags Picker ─────────────────────────────────────────────── */
+/* â”€â”€ Tags Picker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .tags-pick {
   display: flex;
   flex-wrap: wrap;
@@ -1041,7 +1041,7 @@ body.light-mode .icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
   font-style: italic;
 }
 
-/* ── AI Button — sparkle spin when idle ─────────────────────── */
+/* â”€â”€ AI Button â€” sparkle spin when idle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .btn-ai-magic {
   display: flex;
   align-items: center;
@@ -1116,7 +1116,7 @@ body.light-mode .icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
   flex-shrink: 0;
 }
 
-/* ── Stats Dashboard ─────────────────────────────────────────── */
+/* â”€â”€ Stats Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .stats-dash {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1151,7 +1151,7 @@ body.light-mode .icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
   margin-top: 2px;
 }
 
-/* ── Form Actions ────────────────────────────────────────────── */
+/* â”€â”€ Form Actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .form-actions { display: flex; gap: 8px; }
 .quick-actions { display: flex; gap: 6px; }
 
@@ -1208,7 +1208,7 @@ body.light-mode .icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
 .feedback-box.err  { background: var(--red-soft);    border: 1px solid var(--red-border);   color: #f87171; }
 .feedback-box.info { background: var(--theme-soft);  border: 1px solid var(--theme-glow);   color: var(--tx-theme); }
 
-/* ── Buttons ─────────────────────────────────────────────────── */
+/* â”€â”€ Buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -1244,7 +1244,7 @@ body.light-mode .icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
   outline-offset: 2px;
 }
 
-/* Theme button — IMPROVED: shimmer effect on hover */
+/* Theme button â€” IMPROVED: shimmer effect on hover */
 .btn-theme {
   background: linear-gradient(135deg, var(--theme) 0%, var(--theme-dark) 100%);
   color: white;
@@ -1363,7 +1363,7 @@ body.light-mode .btn-danger:hover {
 
 .btn-sm { padding: 5px 11px; font-size: 11px; }
 
-/* ── Links Tab ───────────────────────────────────────────────── */
+/* â”€â”€ Links Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .filter-bar {
   padding: 10px 13px 9px;
   background: var(--bg-surface);
@@ -1526,7 +1526,7 @@ body.light-mode .btn-danger:hover {
   padding: 8px;
 }
 
-/* ── FIXED: Grid applied to links-scroller via JS ───────────── */
+/* â”€â”€ FIXED: Grid applied to links-scroller via JS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .links-scroller.grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1568,7 +1568,7 @@ body.light-mode .btn-danger:hover {
   right: 4px;
 }
 
-/* ── Empty State — IMPROVED: floating animation ─────────────── */
+/* â”€â”€ Empty State â€” IMPROVED: floating animation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -1596,7 +1596,7 @@ body.light-mode .btn-danger:hover {
 .empty-title { font-size: 14px; font-weight: 700; color: var(--tx-2); }
 .empty-sub   { font-size: 11px; color: var(--tx-3); max-width: 230px; line-height: 1.5; }
 
-/* ── Link Cards — IMPROVED: lift + left accent ──────────────── */
+/* â”€â”€ Link Cards â€” IMPROVED: lift + left accent â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .link-card {
   display: flex;
   align-items: flex-start;
@@ -1662,7 +1662,7 @@ body.light-mode .btn-danger:hover {
 .lc-cb:hover { border-color: var(--theme); }
 .lc-cb.checked { background: var(--theme); border-color: var(--theme); }
 .lc-cb.checked::after {
-  content: '✓';
+  content: '\2713';
   color: white;
   font-size: 10px;
   font-weight: 900;
@@ -1835,7 +1835,7 @@ body.light-mode .btn-danger:hover {
   flex-shrink: 0;
 }
 
-/* ── Folders Tab ─────────────────────────────────────────────── */
+/* â”€â”€ Folders Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .sec-header {
   display: flex;
   align-items: center;
@@ -1992,7 +1992,7 @@ body.light-mode .btn-danger:hover {
   outline-offset: 2px;
 }
 
-/* FIXED: Folder accordion — natural height animation */
+/* FIXED: Folder accordion â€” natural height animation */
 .folder-content {
   max-height: 0;
   overflow: hidden;
@@ -2173,7 +2173,7 @@ body.light-mode .btn-danger:hover {
 }
 .tag-del:hover { color: var(--red); }
 
-/* ── Export Tab ──────────────────────────────────────────────── */
+/* â”€â”€ Export Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .export-hero {
   display: flex;
   align-items: center;
@@ -2293,7 +2293,7 @@ body.light-mode .btn-danger:hover {
 .exp-info strong { display: block; font-size: 12px; font-weight: 700; color: var(--tx-1); margin-bottom: 2px; }
 .exp-info span   { font-size: 10px; color: var(--tx-3); }
 
-/* ── Modals ───────────────────────────────────────────────────── */
+/* â”€â”€ Modals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .modal-back {
   position: fixed;
   inset: 0;
@@ -2382,7 +2382,7 @@ body.light-mode .btn-danger:hover {
   background: var(--bg-card);
 }
 
-/* ── Toast — IMPROVED: spring cubic-bezier entry ────────────── */
+/* â”€â”€ Toast â€” IMPROVED: spring cubic-bezier entry â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .toast-stack {
   position: fixed;
   bottom: 14px;
@@ -2431,10 +2431,10 @@ body.light-mode .btn-danger:hover {
 .toast-item.warn { border-color: var(--orange-border); color: var(--orange); }
 .toast-icon { font-size: 14px; flex-shrink: 0; }
 
-/* ── Utility ─────────────────────────────────────────────────── */
+/* â”€â”€ Utility â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .hidden { display: none; }
 
-/* ── Options Page ────────────────────────────────────────────── */
+/* â”€â”€ Options Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.options-page {
   width: 100%;
   max-width: 100%;
@@ -2446,7 +2446,7 @@ body.options-page {
   padding: 0;
 }
 
-/* ── Reduced Motion ─────────────────────────────────────────── */
+/* â”€â”€ Reduced Motion â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -2458,7 +2458,7 @@ body.options-page {
   }
 }
 /* ============================================================
-   ZHunter PRO — Premium Motion/UI Upgrade
+   ZHunter PRO â€” Premium Motion/UI Upgrade
    Added without removing old features
    ============================================================ */
 :root {
@@ -2676,7 +2676,7 @@ textarea:focus {
   }
 }
 
-/* ZHunter PRO v6.2 — Luxury Dark Premium Polish */
+/* ZHunter PRO v6.2 â€” Luxury Dark Premium Polish */
 body:not(.light-mode){--bg-base:#050816;--bg-surface:#0a0f24;--bg-card:#0e1530;--bg-elevated:#0e1530;--bg-hover:#131b3d;--bd:#1a2347;--bd-light:#2a3866;--theme:#06b6d4;--theme-light:#67e8f9;--theme-soft:rgba(6,182,212,.14);--theme-glow:rgba(6,182,212,.34);--sh-md:0 12px 38px rgba(0,0,0,.72),0 0 26px rgba(6,182,212,.08)}
 .app-header{background:linear-gradient(135deg,#050816 0%,#0a0f24 48%,#0e1530 100%);box-shadow:0 14px 46px rgba(6,182,212,.16)}
 .brand-logo-img,.opt-logo{box-shadow:0 0 0 1px rgba(255,255,255,.08),0 10px 30px rgba(6,182,212,.55)}
@@ -2692,7 +2692,7 @@ body:not(.light-mode){--bg-base:#050816;--bg-surface:#0a0f24;--bg-card:#0e1530;-
 
 
 /* ============================================================
-   ZHunter PRO v6.3 — Premium Motion + YouTube Thumbnail Fix
+   ZHunter PRO v6.3 â€” Premium Motion + YouTube Thumbnail Fix
    ============================================================ */
 
 @keyframes premiumCardReveal {
@@ -2907,7 +2907,7 @@ body:not(.light-mode){--bg-base:#050816;--bg-surface:#0a0f24;--bg-card:#0e1530;-
 }
 
 /* ============================================================
-   ZHunter PRO v7.0 — Luxury UI/UX Premium Layer
+   ZHunter PRO v7.0 â€” Luxury UI/UX Premium Layer
    Professional red-dark glassmorphism, richer motion, stronger cards
    ============================================================ */
 :root{
@@ -2997,7 +2997,7 @@ body::before{
 @keyframes premiumFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 @media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
 
-/* ── Reference Hunt + Description UI Replacement ─────────────
+/* â”€â”€ Reference Hunt + Description UI Replacement â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    Scoped to the Hunt/AI Description controls only. */
 .hunt-zone {
   padding: 12px 14px 4px !important;
@@ -3229,7 +3229,7 @@ body::before{
 }
 
 
-/* ── v7 Settings Logo Motion + Theme Polish ────────────────── */
+/* â”€â”€ v7 Settings Logo Motion + Theme Polish â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .opt-logo-shell {
   position: relative;
   width: 64px;
@@ -3302,7 +3302,7 @@ body::before{
 @keyframes optLogoOrbit { 0%,100% { transform: scale(.94) rotate(0deg); opacity: .62; } 50% { transform: scale(1.10) rotate(6deg); opacity: .25; } }
 
 /* ============================================================
-   Day/Night Mode Home UI Fix — Light Mode Final Overrides
+   Day/Night Mode Home UI Fix â€” Light Mode Final Overrides
    Scope: popup/home UI only. Fixes earlier premium dark polish
    selectors that were overriding light variables without being
    scoped to body:not(.light-mode).
@@ -3561,7 +3561,7 @@ body.light-mode .toast-item {
 }
 
 
-/* ── v7.1 Day/Night consistency fixes ─────────────────────── */
+/* â”€â”€ v7.1 Day/Night consistency fixes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light-mode .app-header,
 body.light-mode .tab-nav,
 body.light-mode .panel,
@@ -3644,7 +3644,7 @@ body.light-mode .premium-export-card * {
   color: inherit;
 }
 
-/* ── Hunt Preview Modal — Image Selection Grid ──────────── */
+/* â”€â”€ Hunt Preview Modal â€” Image Selection Grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .hunt-img-bar {
   display: flex;
   align-items: center;
@@ -3720,10 +3720,10 @@ body.light-mode .premium-export-card * {
   color: rgba(255, 255, 255, 0.5);
 }
 .hunt-img-card:not(.selected) .hunt-img-mark::before {
-  content: '✕';
+  content: '\2715';
 }
 .hunt-img-card.selected .hunt-img-mark::before {
-  content: '✓';
+  content: '\2713';
 }
 .hunt-img-card:hover {
   transform: scale(1.02);
@@ -3746,12 +3746,12 @@ body.light-mode .premium-export-card * {
 }
 
 /* ============================================================
-   ZHunter PRO v7.4 — CYBERPUNK SHELL
+   ZHunter PRO v7.4 â€” CYBERPUNK SHELL
    Cyan-Teal + neon glow + rich micro-animations.
-   Pure CSS — no JS hooks added, all functions intact.
+   Pure CSS â€” no JS hooks added, all functions intact.
    ============================================================ */
 
-/* ── Subtle ambient grid overlay (signature cyber touch) ─── */
+/* â”€â”€ Subtle ambient grid overlay (signature cyber touch) â”€â”€â”€ */
 body::before {
   content: '';
   position: fixed;
@@ -3802,14 +3802,14 @@ body.light-mode::after {
 }
 
 /* Make sure non-fixed UI sits above the ambient grid overlay.
-   IMPORTANT: do NOT include .modal-back or .toast-stack here — those
+   IMPORTANT: do NOT include .modal-back or .toast-stack here â€” those
    already have position:fixed and overriding to position:relative
    collapses them into the document flow (Hunt modal disappears bug). */
 .app-header, .tab-nav, .tab-panel { position: relative; z-index: 1; }
 .modal-back   { z-index: 9999; }
 .toast-stack  { z-index: 9998; }
 
-/* ─────────────────── KEYFRAMES ─────────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ KEYFRAMES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @keyframes zh-scanline {
   0%   { transform: translateX(-120%) skewX(-12deg); opacity: 0; }
   10%  { opacity: 1; }
@@ -3864,7 +3864,7 @@ body.light-mode::after {
   100% { background-position: 200% 50%; }
 }
 
-/* ─────────────── HEADER refinements ─────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ HEADER refinements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .app-header {
   position: relative;
   background: linear-gradient(180deg,
@@ -3925,7 +3925,7 @@ body.light-mode .brand-name {
   animation: zh-spin-in 0.6s cubic-bezier(0.2, 1.2, 0.4, 1);
 }
 
-/* ─────────────── TAB navigation ─────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ TAB navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .tab-nav {
   background: rgba(10, 15, 36, 0.5);
   border-bottom: 1px solid var(--bd);
@@ -3952,7 +3952,7 @@ body.light-mode .tab-nav { background: #ffffff; border-bottom: 1px solid #e0e0e0
   filter: drop-shadow(0 0 8px var(--theme-glow));
 }
 
-/* FIXED: gradient border — hunt button restored to original, gradient border handled by ::before at end of file */
+/* FIXED: gradient border â€” hunt button restored to original, gradient border handled by ::before at end of file */
 .btn-hunt-main {
   position: relative;
   overflow: hidden;
@@ -3994,7 +3994,7 @@ body.light-mode .tab-nav { background: #ffffff; border-bottom: 1px solid #e0e0e0
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.4), inset 0 -1px 0 rgba(0, 0, 0, 0.2);
 }
 
-/* ─────────────── INPUT FOCUS — cyan glow ring ─────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ INPUT FOCUS â€” cyan glow ring â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .inp:focus,
 .sel:focus,
 textarea.inp:focus,
@@ -4022,7 +4022,7 @@ input[type="url"]:focus {
   filter: drop-shadow(0 0 6px var(--theme-glow));
 }
 
-/* ─────────────── BUTTONS — glow on hover ─────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ BUTTONS â€” glow on hover â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .btn,
 .ico-btn,
 .hdr-btn {
@@ -4052,7 +4052,7 @@ input[type="url"]:focus {
   filter: drop-shadow(0 0 6px var(--theme));
 }
 
-/* ─────────────── TAG CHIPS — glow-on selection ─────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ TAG CHIPS â€” glow-on selection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .tag-chip {
   transition: all var(--t-norm);
   border-radius: var(--r-pill);
@@ -4070,7 +4070,7 @@ input[type="url"]:focus {
   transform: translateY(-1px);
 }
 
-/* ─────────────── CARDS — hover-lift glow ─────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ CARDS â€” hover-lift glow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .lc-card,
 .link-card {
   animation: zh-card-in 0.42s cubic-bezier(0.2, 0.9, 0.3, 1) backwards;
@@ -4108,7 +4108,7 @@ input[type="url"]:focus {
 .lc-card:nth-child(8) { animation-delay: 0.30s; }
 .lc-card:nth-child(n+9) { animation-delay: 0.32s; }
 
-/* ─────────────── MODALS — slide + blur in ─────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ MODALS â€” slide + blur in â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .modal-back:not(.hidden) {
   animation: zh-modal-bg-in 0.22s ease forwards;
   background: rgba(2, 4, 11, 0.55);
@@ -4147,7 +4147,7 @@ body.light-mode .modal-back:not(.hidden) {
   box-shadow: 0 0 12px var(--theme-glow);
 }
 
-/* ─────────────── TOASTS — bounce in ─────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ TOASTS â€” bounce in â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .toast-item {
   background: rgba(10, 15, 36, 0.92) !important;
   backdrop-filter: blur(16px);
@@ -4169,7 +4169,7 @@ body.light-mode .toast-item {
 .toast-item.err  { box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 0 24px rgba(239, 68, 68, 0.25); }
 .toast-item.warn { box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 0 24px rgba(245, 158, 11, 0.25); }
 
-/* ─────────────── PROGRESS BAR — animated ─────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ PROGRESS BAR â€” animated â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .fp-bar { background: rgba(6, 182, 212, 0.08); border: 1px solid rgba(6, 182, 212, 0.15); }
 .fp-fill {
   background: linear-gradient(90deg, var(--theme), var(--theme-light), var(--theme));
@@ -4178,7 +4178,7 @@ body.light-mode .toast-item {
   box-shadow: 0 0 12px var(--theme), 0 0 6px var(--theme);
 }
 
-/* ─────────────── STAT PILL — glow border ─────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ STAT PILL â€” glow border â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .stat-pill {
   border: 1px solid rgba(6, 182, 212, 0.25);
   background: rgba(6, 182, 212, 0.05);
@@ -4191,7 +4191,7 @@ body.light-mode .toast-item {
   color: var(--theme-light);
 }
 
-/* ─────────────── HUNT PREVIEW MODAL polish ─────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ HUNT PREVIEW MODAL polish â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .hunt-img-card {
   border-radius: 10px;
   background: rgba(6, 182, 212, 0.04);
@@ -4207,7 +4207,7 @@ body.light-mode .toast-item {
 }
 .hunt-img-card:hover { transform: scale(1.03); }
 
-/* ─────────────── EMPTY STATES — float ─────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ EMPTY STATES â€” float â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @keyframes zh-empty-float {
   0%, 100% { transform: translateY(0); }
   50%      { transform: translateY(-6px); }
@@ -4220,7 +4220,7 @@ body.light-mode .toast-item {
   opacity: 0.7;
 }
 
-/* ─────────────── CATEGORY BADGE ─────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ CATEGORY BADGE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cat-badge {
   background: linear-gradient(135deg, rgba(6, 182, 212, 0.15), rgba(6, 182, 212, 0.05));
   border: 1px solid var(--bd-theme);
@@ -4232,7 +4232,7 @@ body.light-mode .toast-item {
   font-size: 11px;
 }
 
-/* ─────────────── SCROLLBARS — slim cyan ─────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ SCROLLBARS â€” slim cyan â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
@@ -4246,7 +4246,7 @@ body.light-mode .toast-item {
 }
 * { scrollbar-color: rgba(6, 182, 212, 0.30) transparent; scrollbar-width: thin; }
 
-/* ─────────────── REDUCED MOTION respect ─────────────── */
+/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ REDUCED MOTION respect â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -4258,10 +4258,10 @@ body.light-mode .toast-item {
 }
 
 /* ============================================================
-   v7.4.1 — Color Grading Polish + Light Mode Refinements
+   v7.4.1 â€” Color Grading Polish + Light Mode Refinements
    ============================================================ */
 
-/* Light mode — flat white page (Google/Apple clean) */
+/* Light mode â€” flat white page (Google/Apple clean) */
 body.light-mode {
   background: #ffffff !important;
 }
@@ -4288,7 +4288,7 @@ body.light-mode .tab-btn.active::after {
   background: #00a0c0 !important;
 }
 
-/* Light mode — cards */
+/* Light mode â€” cards */
 body.light-mode .link-card,
 body.light-mode .opt-card,
 body.light-mode .collect-card,
@@ -4321,7 +4321,7 @@ body.light-mode .stat-pill:hover {
   background: #ebebed;
 }
 
-/* Light mode — header buttons (secondary/outlined) */
+/* Light mode â€” header buttons (secondary/outlined) */
 body.light-mode .hdr-btn {
   background: transparent !important;
   border: 1px solid #d0d0d5 !important;
@@ -4333,7 +4333,7 @@ body.light-mode .hdr-btn:hover {
   color: #1d1d1f !important;
 }
 
-/* Light mode — Hunt product card (gradient border wrapper unchanged) */
+/* Light mode â€” Hunt product card (gradient border wrapper unchanged) */
 body.light-mode .btn-hunt-main {
   background: #f5f5f7 !important;
   border: none !important;
@@ -4353,7 +4353,7 @@ body.light-mode .btn-hunt-main:hover {
   filter: none !important;
 }
 
-/* Light mode — modal (Review Before Saving) */
+/* Light mode â€” modal (Review Before Saving) */
 body.light-mode .modal-back:not(.hidden) .modal-box {
   background: #ffffff;
   border: 1px solid #e0e0e0;
@@ -4364,7 +4364,7 @@ body.light-mode .modal-head {
   border-bottom: 1px solid #e0e0e0;
 }
 
-/* Dark mode — richer depth: subtle vignette at corners draws focus inward */
+/* Dark mode â€” richer depth: subtle vignette at corners draws focus inward */
 body:not(.light-mode) {
   background:
     radial-gradient(ellipse at top, rgba(6, 182, 212, 0.10) 0%, transparent 35%),
@@ -4373,7 +4373,7 @@ body:not(.light-mode) {
     linear-gradient(180deg, #050816 0%, #060a1c 50%, #050816 100%) !important;
 }
 
-/* Brand name — more cinematic 3-stop gradient */
+/* Brand name â€” more cinematic 3-stop gradient */
 .brand-name {
   background: linear-gradient(135deg,
     #ffffff 0%,
@@ -4393,7 +4393,7 @@ body.light-mode .brand-name {
   filter: none;
 }
 
-/* PRO badge — light mode */
+/* PRO badge â€” light mode */
 body.light-mode .brand-pro {
   background: #00a0c0 !important;
   color: #ffffff !important;
@@ -4401,7 +4401,7 @@ body.light-mode .brand-pro {
   animation: none;
 }
 
-/* Form inputs — focus ring */
+/* Form inputs â€” focus ring */
 body.light-mode .inp:focus,
 body.light-mode .sel:focus,
 body.light-mode textarea:focus,
@@ -4411,7 +4411,7 @@ body.light-mode input:focus {
   background: #ffffff !important;
 }
 
-/* Tag chips — unified neutral style */
+/* Tag chips â€” unified neutral style */
 body.light-mode .tag-chip.on,
 body.light-mode .tag-chip.off {
   background: #f0f0f5 !important;
@@ -4426,7 +4426,7 @@ body.light-mode .tag-chip.on:hover {
   color: #1d1d1f !important;
 }
 
-/* Light mode — hide ambient grid for cleaner white surface */
+/* Light mode â€” hide ambient grid for cleaner white surface */
 body.light-mode::before {
   opacity: 0;
 }
@@ -4445,7 +4445,7 @@ body.light-mode::after {
 }
 
 /* ============================================================
-   v7.5 — Bulk Hunt Tab Styles
+   v7.5 â€” Bulk Hunt Tab Styles
    ============================================================ */
 .bulk-scroll {
   max-height: var(--panel-max-h);
@@ -4487,7 +4487,7 @@ body.light-mode::after {
 
 .bulk-toggle-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 6px;
   padding: 4px;
   background: var(--bg-surface);
@@ -4517,6 +4517,28 @@ body.light-mode::after {
 
 .bulk-view { display: none; flex-direction: column; gap: 12px; }
 .bulk-view.active { display: flex; }
+/* -- Bulk Queue panel styles ----------------------------- */
+.bulk-queue-topbar { display: flex; flex-direction: column; gap: 8px; }
+.bulk-queue-autocap {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--tx-3); cursor: pointer; user-select: none;
+}
+.bulk-queue-autocap input[type="checkbox"] {
+  accent-color: var(--theme); width: 13px; height: 13px; cursor: pointer;
+}
+.bulk-queue-autocap:hover { color: var(--theme-light); }
+.bulk-queue-add-row { display: flex; gap: 6px; }
+.bulk-queue-input {
+  flex: 1; background: var(--bg-input); border: 1px solid var(--bd);
+  border-radius: var(--r-sm); color: var(--tx-1); font-size: 11px;
+  padding: 5px 8px; outline: none; transition: border-color var(--t-norm);
+}
+.bulk-queue-input:focus {
+  border-color: var(--theme);
+  box-shadow: 0 0 0 2px rgba(6,182,212,0.12);
+}
+.bulk-queue-input::placeholder { color: var(--tx-4); }
+
 
 .bulk-actions-row {
   display: flex;
@@ -4563,7 +4585,7 @@ body.light-mode::after {
   box-shadow: 0 0 8px var(--theme-glow);
 }
 .bulk-tab-row.checked .bulk-tab-checkbox::after {
-  content: '✓';
+  content: '\2713';
   color: #050816;
   font-size: 11px;
   font-weight: 900;
@@ -4631,7 +4653,7 @@ body.light-mode::after {
 }
 .bulk-summary span:first-child { color: var(--theme-light); font-weight: 700; }
 
-/* FIXED: gradient border — bulk button restored, gradient border handled by ::before at end of file */
+/* FIXED: gradient border â€” bulk button restored, gradient border handled by ::before at end of file */
 .btn-bulk-main {
   width: 100%;
   padding: 14px 18px;
@@ -4670,7 +4692,7 @@ body.light-mode::after {
   filter: drop-shadow(0 0 6px var(--theme-glow));
 }
 
-/* ── Master Sheet view ─────────────────────────── */
+/* â”€â”€ Master Sheet view â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .master-stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -4746,7 +4768,7 @@ body.light-mode::after {
   border-color: var(--red) !important;
 }
 
-/* ── Bulk Progress Modal ──────────────────────── */
+/* â”€â”€ Bulk Progress Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .bulk-progress-box { width: 440px; max-width: 100%; }
 .bulk-prog-bar-wrap {
   margin-bottom: 14px;
@@ -4987,7 +5009,7 @@ body.light-mode .bulk-rs-item.ok      { background: rgba(16,185,129,0.08); }
 body.light-mode .bulk-rs-item.partial { background: rgba(251,191,36,0.10); }
 body.light-mode .bulk-rs-item.fail    { background: rgba(239,68,68,0.08); }
 
-/* ── Hunt Preview Modal — Inline AI Button on Notes ──────── */
+/* â”€â”€ Hunt Preview Modal â€” Inline AI Button on Notes â”€â”€â”€â”€â”€â”€â”€â”€ */
 .hunt-notes-wrap {
   position: relative;
 }
@@ -4995,7 +5017,7 @@ body.light-mode .bulk-rs-item.fail    { background: rgba(239,68,68,0.08); }
   padding-bottom: 36px;
 }
 
-/* Hunt preview — weight & package dimension fields */
+/* Hunt preview â€” weight & package dimension fields */
 #huntPreviewModal .modal-dim-inp {
   text-align: center;
 }
@@ -5086,7 +5108,7 @@ body.light-mode .bulk-rs-item.fail    { background: rgba(239,68,68,0.08); }
   to   { transform: rotate(360deg); }
 }
 
-/* Light mode — hunt AI button (primary) */
+/* Light mode â€” hunt AI button (primary) */
 body.light-mode .hunt-ai-btn {
   background: #00a0c0;
   border-color: #00a0c0;
@@ -5099,10 +5121,10 @@ body.light-mode .hunt-ai-btn:hover:not(:disabled) {
 }
 
 /* ============================================================
-   v7.6 — Master Sheet Rows + Bulk Delete + Re-hunt + Column toggles
+   v7.6 â€” Master Sheet Rows + Bulk Delete + Re-hunt + Column toggles
    ============================================================ */
 
-/* Bulk-tab — duplicate badge */
+/* Bulk-tab â€” duplicate badge */
 .bulk-tab-row.duplicate {
   background: rgba(251, 191, 36, 0.06);
   border-left: 3px solid var(--yellow);
@@ -5180,7 +5202,7 @@ body.light-mode .hunt-ai-btn:hover:not(:disabled) {
   box-shadow: 0 0 6px var(--theme-glow);
 }
 .bulk-col-toggle.on .bulk-col-checkbox::after {
-  content: '✓';
+  content: '\2713';
   color: #050816;
   font-size: 10px;
   font-weight: 900;
@@ -5192,7 +5214,7 @@ body.light-mode .hunt-ai-btn:hover:not(:disabled) {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Master Sheet — list head + quick actions */
+/* Master Sheet â€” list head + quick actions */
 .master-list-head {
   display: flex;
   align-items: center;
@@ -5211,7 +5233,7 @@ body.light-mode .hunt-ai-btn:hover:not(:disabled) {
   padding: 3px 8px;
 }
 
-/* Master Sheet — rows list */
+/* Master Sheet â€” rows list */
 .master-rows-list {
   background: var(--bg-input);
   border: 1px solid var(--bd);
@@ -5266,7 +5288,7 @@ body.light-mode .hunt-ai-btn:hover:not(:disabled) {
   box-shadow: 0 0 6px var(--theme-glow);
 }
 .master-row.selected .master-row-check::after {
-  content: '✓';
+  content: '\2713';
   color: #050816;
   font-size: 10px;
   font-weight: 900;
@@ -5344,7 +5366,7 @@ body.light-mode .hunt-ai-btn:hover:not(:disabled) {
   to   { transform: rotate(360deg); }
 }
 
-/* Master Sheet — bulk action bar */
+/* Master Sheet â€” bulk action bar */
 .master-bulk-bar {
   position: sticky;
   bottom: 0;
@@ -5377,7 +5399,7 @@ body.light-mode .hunt-ai-btn:hover:not(:disabled) {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Settings page — column toggle grid */
+/* Settings page â€” column toggle grid */
 .opt-bulk-cols-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -5420,7 +5442,7 @@ body.light-mode .hunt-ai-btn:hover:not(:disabled) {
   box-shadow: 0 0 6px var(--theme-glow);
 }
 .opt-col-item.on .opt-col-checkbox::after {
-  content: '✓';
+  content: '\2713';
   color: #050816;
   font-size: 10px;
   font-weight: 900;
@@ -5438,10 +5460,10 @@ body.light-mode .hunt-ai-btn:hover:not(:disabled) {
 }
 
 /* ============================================================
-   ZHunter PRO v7.6 — ANIMATED RAINBOW BORDER (wrapper technique)
+   ZHunter PRO v7.6 â€” ANIMATED RAINBOW BORDER (wrapper technique)
    TECHNIQUE: .hunt-zone acts as the 2px gradient shell.
    Its padding:2px + conic-gradient background creates the border.
-   .btn-hunt-main sits inside with its ORIGINAL background intact —
+   .btn-hunt-main sits inside with its ORIGINAL background intact â€”
    nothing inside the card is changed whatsoever.
    ============================================================ */
 
@@ -5484,7 +5506,7 @@ body.light-mode .hunt-ai-btn:hover:not(:disabled) {
   }
 }
 
-/* Hunt Selected Tabs — same rainbow border shell as Hunt Product (.hunt-zone-border in markup) */
+/* Hunt Selected Tabs â€” same rainbow border shell as Hunt Product (.hunt-zone-border in markup) */
 .hunt-zone-border > .btn-bulk-main {
   width: 100%;
   border: 2px solid transparent;
@@ -5492,7 +5514,7 @@ body.light-mode .hunt-ai-btn:hover:not(:disabled) {
   box-sizing: border-box;
 }
 
-/* ── TASK 2: DARK + LIGHT MODE IMPROVEMENTS ─────────────────── */
+/* â”€â”€ TASK 2: DARK + LIGHT MODE IMPROVEMENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 body.light-mode .bulk-header {
   background: #f5f5f7 !important;
@@ -5549,7 +5571,7 @@ body.light-mode .bulk-bar {
 }
 body.light-mode .bulk-ct { color: #00a0c0 !important; }
 
-/* UPDATED: export tab light mode — icons keep colors */
+/* UPDATED: export tab light mode â€” icons keep colors */
 body.light-mode .exp-html { background: rgba(6,182,212,0.08)  !important; color: var(--theme-dark) !important; }
 body.light-mode .exp-txt  { background: rgba(59,130,246,0.08) !important; }
 body.light-mode .exp-json { background: rgba(245,158,11,0.08) !important; }
@@ -5599,22 +5621,22 @@ body.light-mode .tags-pick {
   border-color: var(--bd) !important;
 }
 
-/* ── TASK 3: BUG FIXES ───────────────────────────────────────────
-   1. #newFolderForm / #newTagForm (hidden duplicate forms) — styled
+/* â”€â”€ TASK 3: BUG FIXES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   1. #newFolderForm / #newTagForm (hidden duplicate forms) â€” styled
       as disabled to make clear they are non-functional placeholders.
-   2. Disabled master-download buttons — clear visual state.
+   2. Disabled master-download buttons â€” clear visual state.
    3. Missing active states on view toggle buttons.
    4. Incorrect border-radius on some elements.
-   ────────────────────────────────────────────────────────────── */
+   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 /* UPDATED: #newFolderForm and #newTagForm are hidden extra forms
-   that aren't wired up — hide permanently so they can't confuse */
+   that aren't wired up â€” hide permanently so they can't confuse */
 #newFolderForm,
 #newTagForm {
   display: none !important; /* UPDATED: these duplicate forms are not functional */
 }
 
-/* UPDATED: master download buttons — clear disabled visual state */
+/* UPDATED: master download buttons â€” clear disabled visual state */
 #masterDlXlsxBtn:disabled,
 #masterDlHtmlBtn:disabled {
   opacity: 0.4 !important;
@@ -5631,12 +5653,12 @@ body.light-mode .tags-pick {
   50%       { box-shadow: 0 0 0 4px rgba(6,182,212,0.20); }
 }
 
-/* UPDATED: master-dl-row — now 2 columns (only 2 buttons) */
+/* UPDATED: master-dl-row â€” now 2 columns (only 2 buttons) */
 .master-dl-row {
   grid-template-columns: 1fr 1fr !important;
 }
 
-/* UPDATED: bulk action buttons — improved active/focus states */
+/* UPDATED: bulk action buttons â€” improved active/focus states */
 .bulk-btn:active      { transform: scale(0.95); }
 .v-btn:active         { transform: scale(0.92); }
 .lc-btn:active        { transform: scale(0.92); }
@@ -5646,7 +5668,7 @@ body.light-mode .tags-pick {
 .quick-btn:active     { transform: scale(0.95); }
 .hdr-btn:active       { transform: scale(0.92); }
 
-/* UPDATED: ghost buttons — clearer disabled look in dark mode */
+/* UPDATED: ghost buttons â€” clearer disabled look in dark mode */
 .btn-ghost:disabled {
   opacity: 0.4 !important;
   cursor: not-allowed !important;
@@ -5660,7 +5682,7 @@ body.light-mode .tags-pick {
 /* UPDATED: copyBtn hover state improvement */
 #copyBtn:hover { color: var(--theme-light); }
 
-/* UPDATED: Save Product button — clear primary appearance */
+/* UPDATED: Save Product button â€” clear primary appearance */
 .btn-save {
   background: linear-gradient(135deg, var(--theme) 0%, var(--theme-dark) 100%) !important;
   color: #050816 !important;
@@ -5683,12 +5705,12 @@ body.light-mode .btn-save {
   transform: scale(0.98) !important;
 }
 
-/* UPDATED: tab panel transitions — smoother on switch */
+/* UPDATED: tab panel transitions â€” smoother on switch */
 .tab-panel.active {
   animation: panelIn 0.2s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
-/* UPDATED: clear all tags button — better positioned */
+/* UPDATED: clear all tags button â€” better positioned */
 #clearAllTagsBtn {
   background: transparent !important;
   border: 1px solid var(--red-border) !important;
@@ -5706,7 +5728,7 @@ body.light-mode .btn-save {
   border-color: var(--red) !important;
 }
 
-/* UPDATED: search clear button — clickable area improvement */
+/* UPDATED: search clear button â€” clickable area improvement */
 .s-clear {
   display: flex;
   align-items: center;
@@ -5721,26 +5743,26 @@ body.light-mode .btn-save {
   color: var(--red);
 }
 
-/* UPDATED: load-more button — better style */
+/* UPDATED: load-more button â€” better style */
 .load-more-btn:active { transform: scale(0.98); }
 
-/* UPDATED: bulk action bar buttons — correct btn-sm appearance */
+/* UPDATED: bulk action bar buttons â€” correct btn-sm appearance */
 .bulk-acts .btn { padding: 5px 11px; font-size: 11px; }
 
-/* ── TASK 4: OVERALL UI/UX POLISH ───────────────────────────────
+/* â”€â”€ TASK 4: OVERALL UI/UX POLISH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    Spacing, visual hierarchy, consistency across tabs.
-   ────────────────────────────────────────────────────────────── */
+   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
-/* UPDATED: collect tab — better section spacing */
+/* UPDATED: collect tab â€” better section spacing */
 .form-section { gap: 12px; }
 
-/* UPDATED: form labels — cleaner uppercase */
+/* UPDATED: form labels â€” cleaner uppercase */
 .form-label { letter-spacing: 0.8px; }
 
-/* UPDATED: progress bar in hunt — smoother fill */
+/* UPDATED: progress bar in hunt â€” smoother fill */
 .fp-fill { transition: width 0.35s cubic-bezier(0.2, 0.9, 0.3, 1); }
 
-/* UPDATED: category badge — align with input height */
+/* UPDATED: category badge â€” align with input height */
 .cat-badge { min-height: 38px; }
 
 /* UPDATED: input row alignment */
@@ -5751,27 +5773,27 @@ body.light-mode .btn-save {
   box-shadow: 0 0 14px rgba(255, 255, 255, 0.5);
 }
 
-/* UPDATED: Bulk tab header — cleaner icon */
+/* UPDATED: Bulk tab header â€” cleaner icon */
 .bulk-header-icon {
   box-shadow: 0 4px 16px rgba(6,182,212,0.50), inset 0 1px 0 rgba(255,255,255,0.18);
 }
 
-/* UPDATED: bulk tab list — smooth hover on rows */
+/* UPDATED: bulk tab list â€” smooth hover on rows */
 .bulk-tab-row { border-radius: var(--r-sm); }
 .bulk-tab-row.checked { background: rgba(6,182,212,0.08); }
 
-/* UPDATED: master stats grid — consistent card sizing */
+/* UPDATED: master stats grid â€” consistent card sizing */
 .master-stat { min-height: 70px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 
-/* UPDATED: export tab — hero icon more prominent */
+/* UPDATED: export tab â€” hero icon more prominent */
 .export-hero-ico {
   box-shadow: var(--sh-glow), inset 0 1px 0 rgba(255,255,255,0.10) !important;
 }
 
-/* UPDATED: links footer button — consistent with rest of the UI */
+/* UPDATED: links footer button â€” consistent with rest of the UI */
 .links-footer .btn-red-ghost { font-size: 11px; padding: 7px 16px; }
 
-/* Links tab filter selects — All Categories / Folders / Tags */
+/* Links tab filter selects â€” All Categories / Folders / Tags */
 body.light-mode .f-sel {
   background: #ffffff;
   border: 1px solid #d0d0d5;
@@ -5782,93 +5804,93 @@ body.light-mode .f-sel:hover {
   border-color: #d0d0d5;
 }
 
-/* UPDATED: Folders tab — sec-header title alignment */
+/* UPDATED: Folders tab â€” sec-header title alignment */
 .sec-header { align-items: center; gap: 6px; }
 .sec-title { font-size: 12.5px; }
 
-/* UPDATED: folder toolbar — cleaner spacing */
+/* UPDATED: folder toolbar â€” cleaner spacing */
 .folder-toolbar { padding: 7px 12px 6px; }
 .folder-dl-btn { font-size: 10.5px; padding: 5px 12px; }
 .folder-tb-count { font-weight: 600; }
 
 /* tag-pill padding unified in .tag-pill base rule above */
 
-/* UPDATED: Bulk column toggles — consistency */
+/* UPDATED: Bulk column toggles â€” consistency */
 .bulk-col-label { font-size: 11px; color: var(--tx-2); }
 
-/* UPDATED: quick-actions row — consistent gap */
+/* UPDATED: quick-actions row â€” consistent gap */
 .quick-actions { gap: 5px; margin-top: 2px; }
 
-/* UPDATED: form-actions — full-width save button */
+/* UPDATED: form-actions â€” full-width save button */
 .form-actions { padding: 0; }
 
-/* UPDATED: char counter — green when under limit */
+/* UPDATED: char counter â€” green when under limit */
 .char-counter { transition: color var(--t-fast); }
 #charCount { font-weight: 700; color: var(--theme-light); transition: color var(--t-fast); }
 
-/* UPDATED: links toolbar — better results count style */
+/* UPDATED: links toolbar â€” better results count style */
 .res-count { font-size: 11.5px; font-weight: 700; }
 
-/* UPDATED: Hunt preview modal — grid scrollbar thin */
+/* UPDATED: Hunt preview modal â€” grid scrollbar thin */
 .hunt-imgs-grid { scrollbar-width: thin; }
 
-/* UPDATED: empty state — themed text in both modes */
+/* UPDATED: empty state â€” themed text in both modes */
 .empty-title { color: var(--tx-1); }
 .empty-sub   { color: var(--tx-3); }
 body.light-mode .empty-title { color: #1d1d1f; }
 body.light-mode .empty-sub   { color: #6e6e73; }
 
-/* UPDATED: header layout — consistent vertical alignment */
+/* UPDATED: header layout â€” consistent vertical alignment */
 .header-brand { gap: 10px; }
 .brand-text { gap: 2px; }
 
-/* UPDATED: stat-pill — consistent height */
+/* UPDATED: stat-pill â€” consistent height */
 .stat-pill { height: 34px; padding: 0 12px; gap: 6px; }
 
-/* UPDATED: tab buttons — consistent icon sizing */
+/* UPDATED: tab buttons â€” consistent icon sizing */
 .tab-btn svg { width: 13px; height: 13px; }
 
-/* UPDATED: result summary in bulk modal — better spacing */
+/* UPDATED: result summary in bulk modal â€” better spacing */
 .bulk-result-summary { margin-top: 14px; }
 .bulk-result-meta { font-size: 11px; color: var(--tx-3); text-align: center; margin: 10px 0 14px; }
 
-/* UPDATED: bulk-dl-grid — evenly distribute all 3 buttons */
+/* UPDATED: bulk-dl-grid â€” evenly distribute all 3 buttons */
 .bulk-dl-grid {
   grid-template-columns: 1fr 1.4fr 1fr !important;
 }
 
-/* UPDATED: video preview — match input border style */
+/* UPDATED: video preview â€” match input border style */
 .video-preview { border-radius: var(--r-sm) !important; }
 
-/* UPDATED: modal box — consistent padding for small modals */
+/* UPDATED: modal box â€” consistent padding for small modals */
 .modal-sm .modal-body { padding: 14px 17px; }
 
-/* UPDATED: confirm modal — action buttons full width on small screens */
+/* UPDATED: confirm modal â€” action buttons full width on small screens */
 .modal-sm .modal-foot { gap: 6px; }
 
-/* UPDATED: focus-visible ring — consistent 2px cyan ring everywhere */
+/* UPDATED: focus-visible ring â€” consistent 2px cyan ring everywhere */
 a:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--theme) !important;
   outline-offset: 2px !important;
 }
 
-/* UPDATED: scroll padding — prevent content being cut off at top/bottom */
+/* UPDATED: scroll padding â€” prevent content being cut off at top/bottom */
 .collect-scroll    { scroll-padding-bottom: 16px; }
 .links-scroller    { scroll-padding-top: 4px; }
 .folder-accordion  { scroll-padding-bottom: 8px; }
 
-/* UPDATED: light mode — brand sub text */
+/* UPDATED: light mode â€” brand sub text */
 body.light-mode .brand-sub   { color: #6e6e73; }
 body.light-mode .brand-version { color: #9e9e9e; }
 
-/* UPDATED: settings page (options.html) — light mode consistency */
+/* UPDATED: settings page (options.html) â€” light mode consistency */
 body.options-page.light-mode {
   background: linear-gradient(180deg, #fbfdff 0%, #f1f5f9 100%) !important;
   color: #1a1a2e !important;
 }
 
-/* Light mode — override premium dark input polish */
+/* Light mode â€” override premium dark input polish */
 body.light-mode .input,
 body.light-mode .field-input,
 body.light-mode input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
@@ -5889,7 +5911,7 @@ body.light-mode select:focus {
 }
 
 /* ============================================================
-   Light Mode — Google/Apple Clean Redesign (final cascade)
+   Light Mode â€” Google/Apple Clean Redesign (final cascade)
    Selector: body.light-mode only. Dark mode untouched.
    Gradient border (.hunt-zone-border) untouched.
    ============================================================ */
@@ -5936,13 +5958,13 @@ body.light-mode .modal-head h3 {
   color: #1d1d1f !important;
 }
 
-/* reduced motion — hunt-zone-border freezes (handled above) */
+/* reduced motion â€” hunt-zone-border freezes (handled above) */
 
-/* ══════════════════════════════════════════════════════════════
-   IMAGES TAB — Temu Image Downloader
-   ══════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   IMAGES TAB â€” Temu Image Downloader
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
-/* ── Toolbar ──────────────────────────────────────────────── */
+/* â”€â”€ Toolbar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .img-tab-toolbar {
   display: flex;
   align-items: center;
@@ -5966,7 +5988,7 @@ body.light-mode .modal-head h3 {
   white-space: nowrap;
 }
 
-/* ── Image Grid Wrapper ───────────────────────────────────── */
+/* â”€â”€ Image Grid Wrapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .img-tab-grid-wrap {
   flex: 1;
   overflow-y: auto;
@@ -6031,7 +6053,7 @@ body.light-mode .modal-head h3 {
 }
 .hidden { display: none !important; }
 
-/* ── Image Card ───────────────────────────────────────────── */
+/* â”€â”€ Image Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .img-card {
   position: relative;
   border-radius: var(--r-sm);
@@ -6129,7 +6151,7 @@ body.light-mode .modal-head h3 {
   text-overflow: ellipsis;
 }
 
-/* ── Footer Download Bar ──────────────────────────────────── */
+/* â”€â”€ Footer Download Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .img-tab-footer {
   border-top: 1px solid var(--bd);
   background: var(--bg-surface);
@@ -6161,7 +6183,7 @@ body.light-mode .modal-head h3 {
 .img-status-bar.err  { color: var(--red); }
 .img-status-bar.info { color: var(--theme); }
 
-/* ── Tab panel layout — Images tab needs flex column ────── */
+/* â”€â”€ Tab panel layout â€” Images tab needs flex column â”€â”€â”€â”€â”€â”€ */
 #tab-images {
   flex-direction: column;
   overflow: hidden;
@@ -6172,7 +6194,7 @@ body.light-mode .modal-head h3 {
   overflow-y: auto;
 }
 
-/* ── Light mode adjustments ───────────────────────────────── */
+/* â”€â”€ Light mode adjustments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light-mode .img-card {
   border-color: var(--bd);
   background: #ffffff;
@@ -6194,7 +6216,7 @@ body.light-mode .img-tab-footer {
   border-color: var(--bd);
 }
 
-/* ── Images Tab: Hunt Images button ──────────────────────────── */
+/* â”€â”€ Images Tab: Hunt Images button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .img-hunt-zone {
   padding: 8px 10px 4px;
   flex-shrink: 0;
@@ -6294,13 +6316,13 @@ body.light-mode .img-hunt-icon {
 
 
 /* ============================================================
-   ZHunter PRO v8.0 — PREMIUM UPGRADE
-   Brighter Colors • Richer Animations • Glass Premium UI
+   ZHunter PRO v8.0 â€” PREMIUM UPGRADE
+   Brighter Colors â€¢ Richer Animations â€¢ Glass Premium UI
    ============================================================ */
 
-/* ══════════════════════════════════════════════
-   BODY BACKGROUND — Deep electric universe
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   BODY BACKGROUND â€” Deep electric universe
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 body:not(.light-mode) {
   background:
     radial-gradient(ellipse 80% 40% at 15% -5%,  rgba(0, 229, 255, 0.14) 0%, transparent 55%),
@@ -6309,9 +6331,9 @@ body:not(.light-mode) {
     linear-gradient(180deg, #03060f 0%, #050c1c 40%, #04091a 100%) !important;
 }
 
-/* ══════════════════════════════════════════════
-   AMBIENT GRID — Brighter cyan lines
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   AMBIENT GRID â€” Brighter cyan lines
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 body:not(.light-mode)::before {
   content: '' !important;
   position: fixed !important;
@@ -6327,7 +6349,7 @@ body:not(.light-mode)::before {
   -webkit-mask-image: radial-gradient(ellipse at top, rgba(0,0,0,1) 30%, rgba(0,0,0,0.2) 100%) !important;
 }
 
-/* Radial bloom — brighter */
+/* Radial bloom â€” brighter */
 body:not(.light-mode)::after {
   content: '' !important;
   position: fixed !important;
@@ -6350,9 +6372,9 @@ body:not(.light-mode)::after {
   50%       { opacity: 1;    transform: translateX(-50%) scaleY(1.12); }
 }
 
-/* ══════════════════════════════════════════════
-   HEADER — Premium glass with bright cyan line
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   HEADER â€” Premium glass with bright cyan line
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 .app-header {
   background: linear-gradient(180deg,
     rgba(8, 16, 38, 0.97) 0%,
@@ -6383,7 +6405,7 @@ body:not(.light-mode)::after {
   50%       { background-position:  100% 0; opacity: 1.0; }
 }
 
-/* ── Brand Name — ultra bright gradient ── */
+/* â”€â”€ Brand Name â€” ultra bright gradient â”€â”€ */
 .brand-name {
   background: linear-gradient(135deg,
     #ffffff 0%,
@@ -6405,7 +6427,7 @@ body.light-mode .brand-name {
   filter: none !important;
 }
 
-/* ── PRO badge — bright electric ── */
+/* â”€â”€ PRO badge â€” bright electric â”€â”€ */
 .brand-pro {
   background: linear-gradient(135deg, #00e5ff 0%, #67e8f9 50%, #00cfff 100%) !important;
   color: #020a1a !important;
@@ -6427,7 +6449,7 @@ body.light-mode .brand-pro {
   animation: none !important;
 }
 
-/* ── Logo glow ── */
+/* â”€â”€ Logo glow â”€â”€ */
 .brand-logo-glow {
   background: radial-gradient(circle, rgba(0, 229, 255, 0.55) 0%, transparent 70%) !important;
   animation: logoGlowBreath 3s ease-in-out infinite !important;
@@ -6445,7 +6467,7 @@ body.light-mode .brand-pro {
     0 20px 60px rgba(0, 0, 0, 0.70) !important;
 }
 
-/* ── Stat Pill — glowing border ── */
+/* â”€â”€ Stat Pill â€” glowing border â”€â”€ */
 .stat-pill {
   border: 1px solid rgba(0, 229, 255, 0.32) !important;
   background: rgba(0, 229, 255, 0.06) !important;
@@ -6465,9 +6487,9 @@ body.light-mode .brand-pro {
   transform: scale(1.06) !important;
 }
 
-/* ══════════════════════════════════════════════
-   TAB NAVIGATION — bright underline
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   TAB NAVIGATION â€” bright underline
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 .tab-nav {
   background: rgba(6, 12, 30, 0.60) !important;
   border-bottom: 1px solid rgba(0, 229, 255, 0.14) !important;
@@ -6495,9 +6517,9 @@ body.light-mode .tab-nav {
   color: #67e8f9 !important;
 }
 
-/* ══════════════════════════════════════════════
-   CARDS — Premium glass surfaces
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   CARDS â€” Premium glass surfaces
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 body:not(.light-mode) .link-card,
 body:not(.light-mode) .folder-item,
 body:not(.light-mode) .exp-row,
@@ -6528,21 +6550,21 @@ body:not(.light-mode) .stat-card:hover {
   transform: translateY(-3px) !important;
 }
 
-/* ── Link card — bright left accent ── */
+/* â”€â”€ Link card â€” bright left accent â”€â”€ */
 .link-card::before {
   background: linear-gradient(to bottom, #00e5ff, #0ea5e9) !important;
   width: 3px !important;
   box-shadow: 2px 0 12px rgba(0, 229, 255, 0.50) !important;
 }
 
-/* ── Card hover — glow top border ── */
+/* â”€â”€ Card hover â€” glow top border â”€â”€ */
 body:not(.light-mode) .link-card:hover::before {
   transform: scaleY(1) !important;
 }
 
-/* ══════════════════════════════════════════════
-   BUTTONS — Brighter, premium glow effects
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   BUTTONS â€” Brighter, premium glow effects
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 /* Primary / Theme button */
 .btn-theme {
@@ -6636,9 +6658,9 @@ body:not(.light-mode) .hdr-btn:hover {
   filter: drop-shadow(0 0 8px var(--theme)) !important;
 }
 
-/* ══════════════════════════════════════════════
-   INPUTS — Cyan focus glow
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   INPUTS â€” Cyan focus glow
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 body:not(.light-mode) .inp,
 body:not(.light-mode) .sel,
 body:not(.light-mode) .s-inp,
@@ -6672,9 +6694,9 @@ body:not(.light-mode) input:focus {
   text-shadow: 0 0 10px rgba(0, 229, 255, 0.40) !important;
 }
 
-/* ══════════════════════════════════════════════
-   HUNT MAIN BUTTON — Ultra bright border
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   HUNT MAIN BUTTON â€” Ultra bright border
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 body:not(.light-mode) .btn-hunt-main {
   background:
     linear-gradient(145deg, rgba(12, 24, 52, 0.96), rgba(6, 12, 28, 0.98)) !important;
@@ -6714,9 +6736,9 @@ body:not(.light-mode) .btn-hunt-main:hover {
   filter: drop-shadow(0 0 10px rgba(0, 229, 255, 0.80)) !important;
 }
 
-/* ══════════════════════════════════════════════
-   MODALS — Premium glass panels
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   MODALS â€” Premium glass panels
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 body:not(.light-mode) .modal-back:not(.hidden) {
   background: rgba(1, 4, 12, 0.72) !important;
   backdrop-filter: blur(12px) !important;
@@ -6752,9 +6774,9 @@ body:not(.light-mode) .modal-back:not(.hidden) .modal-box {
   box-shadow: 0 0 14px rgba(0, 229, 255, 0.35) !important;
 }
 
-/* ══════════════════════════════════════════════
-   TOASTS — Bright animated popups
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   TOASTS â€” Bright animated popups
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 body:not(.light-mode) .toast-item {
   background:
     linear-gradient(135deg, rgba(8, 20, 50, 0.96), rgba(4, 10, 28, 0.98)) !important;
@@ -6786,9 +6808,9 @@ body:not(.light-mode) .toast-item.warn { border-color: rgba(251, 191, 36, 0.50) 
   to   { opacity: 0; transform: translateX(50px) scale(0.90); }
 }
 
-/* ══════════════════════════════════════════════
-   TAGS — Bright selected state
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   TAGS â€” Bright selected state
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 body:not(.light-mode) .tag-chip.on {
   background: linear-gradient(135deg, rgba(0, 229, 255, 0.18), rgba(0, 200, 255, 0.08)) !important;
   border-color: #00e5ff !important;
@@ -6809,9 +6831,9 @@ body:not(.light-mode) .tag-chip.off:hover {
   color: #00e5ff !important;
 }
 
-/* ══════════════════════════════════════════════
-   PROGRESS BAR — Bright animated fill
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   PROGRESS BAR â€” Bright animated fill
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 .fp-bar,
 .bulk-prog-bar {
   background: rgba(0, 229, 255, 0.07) !important;
@@ -6831,9 +6853,9 @@ body:not(.light-mode) .tag-chip.off:hover {
   100% { background-position: 200% 50%; }
 }
 
-/* ══════════════════════════════════════════════
-   SCROLLBARS — Bright cyan
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   SCROLLBARS â€” Bright cyan
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
@@ -6846,9 +6868,9 @@ body:not(.light-mode) .tag-chip.off:hover {
 }
 * { scrollbar-color: rgba(0, 229, 255, 0.35) transparent; scrollbar-width: thin; }
 
-/* ══════════════════════════════════════════════
-   LINK CARD — Premium hover animation
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   LINK CARD â€” Premium hover animation
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 .link-card {
   transition:
     transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
@@ -6867,9 +6889,9 @@ body.light-mode .link-card:hover {
   box-shadow: 0 8px 30px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06) !important;
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    MODAL ANIMATIONS
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 @keyframes modalSlideIn {
   from { opacity: 0; transform: translateY(20px) scale(0.95); filter: blur(4px); }
   to   { opacity: 1; transform: translateY(0)    scale(1);    filter: blur(0); }
@@ -6885,9 +6907,9 @@ body.light-mode .link-card:hover {
   animation: modalSlideOut 0.18s ease-in both !important;
 }
 
-/* ══════════════════════════════════════════════
-   EMPTY STATES — Floating with glow
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   EMPTY STATES â€” Floating with glow
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 .empty-state svg,
 .img-empty-state svg {
   animation: emptyFloatGlow 3.2s ease-in-out infinite !important;
@@ -6910,9 +6932,9 @@ body.light-mode .link-card:hover {
   box-shadow: 0 0 20px rgba(0, 229, 255, 0.18) !important;
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    SKELETON LOADING
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 .skeleton-card {
   background: linear-gradient(90deg,
     rgba(15, 30, 60, 0.8) 25%,
@@ -6931,9 +6953,9 @@ body.light-mode .link-card:hover {
   100% { background-position: -200% center; }
 }
 
-/* ══════════════════════════════════════════════
-   FOCUS VISIBLE — Bright cyan ring everywhere
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   FOCUS VISIBLE â€” Bright cyan ring everywhere
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 a:focus-visible,
 button:focus-visible {
   outline: 2px solid #00e5ff !important;
@@ -6941,9 +6963,9 @@ button:focus-visible {
   box-shadow: 0 0 0 4px rgba(0, 229, 255, 0.20) !important;
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    FOLDER ITEMS
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 body:not(.light-mode) .folder-item {
   background:
     linear-gradient(145deg, rgba(12, 24, 52, 0.92), rgba(6, 12, 28, 0.96)) !important;
@@ -6957,9 +6979,9 @@ body:not(.light-mode) .folder-item.open .folder-header {
   background: rgba(0, 229, 255, 0.08) !important;
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    EXPORT ROWS
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 body:not(.light-mode) .exp-row {
   background:
     linear-gradient(145deg, rgba(12, 24, 52, 0.92), rgba(6, 12, 28, 0.96)) !important;
@@ -6971,9 +6993,9 @@ body:not(.light-mode) .exp-row:hover {
   box-shadow: 0 12px 36px rgba(0, 229, 255, 0.18) !important;
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    CATEGORY BADGES
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 .cat-badge.cc-default {
   background: linear-gradient(135deg, rgba(0, 229, 255, 0.16), rgba(0, 200, 255, 0.06)) !important;
   border-color: rgba(0, 229, 255, 0.42) !important;
@@ -6981,9 +7003,9 @@ body:not(.light-mode) .exp-row:hover {
   text-shadow: 0 0 8px rgba(0, 229, 255, 0.45) !important;
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    BULK PROGRESS MODAL
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 body:not(.light-mode) .bulk-tab-row.checked {
   background: rgba(0, 229, 255, 0.08) !important;
 }
@@ -7002,9 +7024,9 @@ body:not(.light-mode) .bulk-tab-row.checked .bulk-tab-checkbox::after {
   box-shadow: inset 3px 0 10px rgba(0, 229, 255, 0.20) !important;
 }
 
-/* ══════════════════════════════════════════════
-   HUNT IMAGE CARD — bright checkmark
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   HUNT IMAGE CARD â€” bright checkmark
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 .hunt-img-card.selected {
   border-color: #00e5ff !important;
   box-shadow:
@@ -7016,9 +7038,9 @@ body:not(.light-mode) .bulk-tab-row.checked .bulk-tab-checkbox::after {
   box-shadow: 0 2px 10px rgba(0, 229, 255, 0.60), inset 0 1px 0 rgba(255,255,255,0.30) !important;
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    SCRAPER TABLE
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 #scraperPreviewTable th, #scraperPreviewTable td {
   padding: 6px;
   border-bottom: 1px solid var(--bd);
@@ -7041,9 +7063,9 @@ body:not(.light-mode) .bulk-tab-row.checked .bulk-tab-checkbox::after {
   color: #00e5ff;
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    REDUCED MOTION RESPECT
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -7057,11 +7079,11 @@ body:not(.light-mode) .bulk-tab-row.checked .bulk-tab-checkbox::after {
 }
 
 
-/* ════════════════════════════════════════════════
-   VIDEO TAB — vid-grid, vid-card, badges, actions
-   ════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   VIDEO TAB â€” vid-grid, vid-card, badges, actions
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
-/* ── Grid wrapper ──────────────────────────────── */
+/* â”€â”€ Grid wrapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .vid-grid-wrap,
 .vid-tab-grid-wrap {
   flex: 1;
@@ -7073,7 +7095,7 @@ body:not(.light-mode) .bulk-tab-row.checked .bulk-tab-checkbox::after {
   min-height: 0;
 }
 
-/* ── Empty state ───────────────────────────────── */
+/* â”€â”€ Empty state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .vid-empty-state {
   display: flex;
   flex-direction: column;
@@ -7088,7 +7110,7 @@ body:not(.light-mode) .bulk-tab-row.checked .bulk-tab-checkbox::after {
 .vid-empty-title { font-size: 13px; font-weight: 600; color: var(--text-muted, #94a3b8); }
 .vid-empty-sub   { font-size: 11px; color: var(--text-dim, #64748b); max-width: 220px; line-height: 1.5; }
 
-/* ── Video card ────────────────────────────────── */
+/* â”€â”€ Video card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .vid-card {
   background: var(--bg-card, #0a1428);
   border: 1px solid var(--bd, #1a2a4a);
@@ -7106,7 +7128,7 @@ body:not(.light-mode) .bulk-tab-row.checked .bulk-tab-checkbox::after {
   transform: translateY(-1px);
 }
 
-/* ── Card top row (badge + url) ────────────────── */
+/* â”€â”€ Card top row (badge + url) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .vid-card-top {
   display: flex;
   align-items: center;
@@ -7140,7 +7162,7 @@ body:not(.light-mode) .bulk-tab-row.checked .bulk-tab-checkbox::after {
   min-width: 0;
 }
 
-/* ── Thumbnail area ────────────────────────────── */
+/* â”€â”€ Thumbnail area â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .vid-thumbnail-area {
   width: 100%;
   height: 96px;
@@ -7165,7 +7187,7 @@ body:not(.light-mode) .bulk-tab-row.checked .bulk-tab-checkbox::after {
   user-select: none;
 }
 
-/* ── Progress bar ──────────────────────────────── */
+/* â”€â”€ Progress bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .vid-progress-wrap {
   display: flex;
   flex-direction: column;
@@ -7189,7 +7211,7 @@ body:not(.light-mode) .bulk-tab-row.checked .bulk-tab-checkbox::after {
   color: var(--text-muted, #94a3b8);
 }
 
-/* ── Action buttons row ────────────────────────── */
+/* â”€â”€ Action buttons row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .vid-card-actions {
   display: flex;
   gap: 5px;
@@ -7231,7 +7253,7 @@ body:not(.light-mode) .bulk-tab-row.checked .bulk-tab-checkbox::after {
   color: #a78bfa;
 }
 
-/* ── Light theme overrides ─────────────────────── */
+/* â”€â”€ Light theme overrides â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light .vid-card {
   background: #f8fafc;
   border-color: #e2e8f0;
@@ -7259,12 +7281,12 @@ body.light .vid-empty-sub   { color: #94a3b8; }
 /* ==========================================================================
 
 /* ==========================================================================
-   ZHunter PRO — PREMIUM DARK NAVY + CYAN THEME
+   ZHunter PRO â€” PREMIUM DARK NAVY + CYAN THEME
    One clean, conflict-free theme block.
-   Deep navy backgrounds · Electric cyan accents · Professional polish.
+   Deep navy backgrounds Â· Electric cyan accents Â· Professional polish.
    ========================================================================== */
 
-/* ── 1. Core palette override ────────────────────────────────────────────── */
+/* â”€â”€ 1. Core palette override â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 :root {
   /* Deep navy backgrounds */
   --bg-base:      #03080f;
@@ -7274,12 +7296,12 @@ body.light .vid-empty-sub   { color: #94a3b8; }
   --bg-hover:     #132848;
   --bg-input:     #071222;
 
-  /* Borders — subtle navy-blue */
+  /* Borders â€” subtle navy-blue */
   --bd:           rgba(255,255,255,0.06);
   --bd-light:     rgba(255,255,255,0.10);
   --bd-theme:     rgba(6,182,212,0.28);
 
-  /* Cyan accents — same family, tuned */
+  /* Cyan accents â€” same family, tuned */
   --theme:        #00d4f5;
   --theme-light:  #67e8f9;
   --theme-dark:   #0891b2;
@@ -7293,10 +7315,10 @@ body.light .vid-empty-sub   { color: #94a3b8; }
   --tx-4: #324d64;
 }
 
-/* ── 2. App body — deep navy ─────────────────────────────────────────────── */
+/* â”€â”€ 2. App body â€” deep navy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body { background: var(--bg-base) !important; }
 
-/* ── 3. Header — animated navy-to-cyan gradient ──────────────────────────── */
+/* â”€â”€ 3. Header â€” animated navy-to-cyan gradient â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @keyframes headerAurora {
   0%,100% { background-position: 0% 50%; opacity: 0.8; }
   50%     { background-position: 100% 50%; opacity: 1; }
@@ -7336,12 +7358,12 @@ body { background: var(--bg-base) !important; }
     transparent 100%);
 }
 
-/* ── 4. Brand logo glow ──────────────────────────────────────────────────── */
+/* â”€â”€ 4. Brand logo glow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .brand-logo-glow {
   background: radial-gradient(circle, rgba(0,212,245,0.55) 0%, rgba(8,145,178,0.3) 50%, transparent 70%) !important;
 }
 
-/* ── 5. Brand name — crisp navy-white with cyan highlight ────────────────── */
+/* â”€â”€ 5. Brand name â€” crisp navy-white with cyan highlight â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .brand-name {
   background: linear-gradient(125deg, #dff6ff 0%, #67e8f9 100%) !important;
   -webkit-background-clip: text !important;
@@ -7359,7 +7381,7 @@ body { background: var(--bg-base) !important; }
 }
 .brand-sub { color: var(--tx-3); letter-spacing: 0.5px; font-size: 9.5px; }
 
-/* ── 6. Stat pill ─────────────────────────────────────────────────────────── */
+/* â”€â”€ 6. Stat pill â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .stat-pill {
   background: rgba(0,212,245,0.07) !important;
   border-color: rgba(0,212,245,0.22) !important;
@@ -7374,7 +7396,7 @@ body { background: var(--bg-base) !important; }
   transform: scale(1.06);
 }
 
-/* ── 7. Header buttons ───────────────────────────────────────────────────── */
+/* â”€â”€ 7. Header buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .hdr-btn {
   transition: background 0.15s, border-color 0.15s, color 0.15s,
               transform 0.18s cubic-bezier(0.2,1.2,0.4,1), box-shadow 0.15s;
@@ -7388,7 +7410,7 @@ body { background: var(--bg-base) !important; }
 }
 .hdr-btn:active { transform: translateY(0) scale(0.90); transition-duration: 0.07s; }
 
-/* ── 8. Tab bar ───────────────────────────────────────────────────────────── */
+/* â”€â”€ 8. Tab bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .tab-nav {
   background: rgba(3,8,15,0.92) !important;
   border-bottom: 1px solid rgba(255,255,255,0.06) !important;
@@ -7413,14 +7435,14 @@ body { background: var(--bg-base) !important; }
 .tab-btn svg            { transition: transform 0.2s cubic-bezier(0.2,1.2,0.4,1); }
 .tab-btn.active svg     { transform: translateY(-1px) scale(1.12); color: var(--theme) !important; }
 
-/* ── 9. Panel slide-in ────────────────────────────────────────────────────── */
+/* â”€â”€ 9. Panel slide-in â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @keyframes panelSlideIn {
   from { opacity: 0; transform: translateY(8px) scale(0.994); }
   to   { opacity: 1; transform: translateY(0)   scale(1); }
 }
 .tab-panel.active { animation: panelSlideIn 0.22s cubic-bezier(0.2,0.9,0.3,1) both; }
 
-/* ── 10. Cards — navy glass ──────────────────────────────────────────────── */
+/* â”€â”€ 10. Cards â€” navy glass â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .link-card, .opt-card, .collect-card, .folder-card, .export-card {
   background: linear-gradient(
     155deg,
@@ -7447,14 +7469,14 @@ body { background: var(--bg-base) !important; }
 }
 .link-card::before { background: linear-gradient(180deg, var(--theme-dark), var(--theme-light)) !important; }
 
-/* ── 11. Link card entrance ──────────────────────────────────────────────── */
+/* â”€â”€ 11. Link card entrance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @keyframes lcSlideIn {
   from { opacity: 0; transform: translateY(10px) scale(0.97); }
   to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
 .link-card { animation: lcSlideIn 0.24s cubic-bezier(0.2,0.9,0.3,1) both; }
 
-/* ── 12. Inputs ───────────────────────────────────────────────────────────── */
+/* â”€â”€ 12. Inputs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .inp {
   background: rgba(6,18,34,0.85) !important;
   border-color: rgba(255,255,255,0.08) !important;
@@ -7466,7 +7488,7 @@ body { background: var(--bg-base) !important; }
   box-shadow: 0 0 0 3px rgba(0,212,245,0.16), inset 0 1px 3px rgba(0,0,0,0.20) !important;
 }
 
-/* ── 13. Hunt main button ─────────────────────────────────────────────────── */
+/* â”€â”€ 13. Hunt main button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .btn-hunt-main {
   background: rgba(0,212,245,0.06) !important;
   border-color: rgba(0,212,245,0.28) !important;
@@ -7481,7 +7503,7 @@ body { background: var(--bg-base) !important; }
 }
 .btn-hunt-main:active { transform: translateY(0) scale(0.993); }
 
-/* ── 14. Theme (cyan) buttons ─────────────────────────────────────────────── */
+/* â”€â”€ 14. Theme (cyan) buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .btn-theme {
   background: linear-gradient(135deg, var(--theme-dark) 0%, var(--theme) 100%) !important;
   box-shadow: 0 2px 12px rgba(0,212,245,0.28) !important;
@@ -7491,21 +7513,21 @@ body { background: var(--bg-base) !important; }
   filter: brightness(1.10) !important;
 }
 
-/* ── 15. All button press feedback ───────────────────────────────────────── */
+/* â”€â”€ 15. All button press feedback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .btn {
   transition: background 0.15s, border-color 0.15s, color 0.15s,
               box-shadow 0.18s, transform 0.10s cubic-bezier(0.3,1.4,0.5,1), filter 0.15s;
 }
 .btn:active:not(:disabled) { transform: scale(0.94) translateY(1px) !important; transition-duration: 0.06s !important; }
 
-/* ── 16. ico-btn ─────────────────────────────────────────────────────────── */
+/* â”€â”€ 16. ico-btn â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .ico-btn {
   transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.2s cubic-bezier(0.2,1.2,0.4,1);
 }
 .ico-btn:hover  { background: rgba(0,212,245,0.08) !important; border-color: rgba(0,212,245,0.35) !important; color: var(--theme-light) !important; transform: translateY(-2px); }
 .ico-btn:active { transform: translateY(0) scale(0.92); transition-duration: 0.07s; }
 
-/* ── 17. Progress bar — animated cyan shine ──────────────────────────────── */
+/* â”€â”€ 17. Progress bar â€” animated cyan shine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @keyframes cyanShine {
   0%   { background-position: -200% center; }
   100% { background-position:  200% center; }
@@ -7537,18 +7559,18 @@ body { background: var(--bg-base) !important; }
   box-shadow: 0 0 14px rgba(16,185,129,0.40) !important;
 }
 
-/* ── 18. Bulk row active pulse ────────────────────────────────────────────── */
+/* â”€â”€ 18. Bulk row active pulse â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @keyframes bulkRowPulse {
   0%,100% { background: rgba(0,212,245,0.04); border-left-color: var(--theme); }
   50%     { background: rgba(0,212,245,0.12); border-left-color: var(--theme-light); box-shadow: inset 2px 0 0 var(--theme-light); }
 }
 .bulk-prog-row.active { color: var(--theme-light) !important; border-left-color: var(--theme) !important; }
 
-/* ── 19. Bulk stats chips ─────────────────────────────────────────────────── */
+/* â”€â”€ 19. Bulk stats chips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .bulk-prog-stats { background: rgba(0,212,245,0.05) !important; border-color: rgba(0,212,245,0.12) !important; }
 .bps-item { background: rgba(0,212,245,0.07) !important; border: 1px solid rgba(0,212,245,0.14) !important; border-radius: 6px; padding: 2px 9px; color: var(--tx-2) !important; font-variant-numeric: tabular-nums; }
 
-/* ── 20. Modal ────────────────────────────────────────────────────────────── */
+/* â”€â”€ 20. Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @keyframes modalPop {
   from { opacity: 0; transform: translateY(-16px) scale(0.93); }
   to   { opacity: 1; transform: translateY(0)     scale(1); }
@@ -7560,42 +7582,42 @@ body { background: var(--bg-base) !important; }
   box-shadow: 0 32px 80px rgba(0,0,0,0.85), 0 0 0 1px rgba(0,212,245,0.12), 0 0 40px rgba(0,212,245,0.06) !important;
 }
 
-/* ── 21. Toasts ───────────────────────────────────────────────────────────── */
+/* â”€â”€ 21. Toasts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @keyframes toastSlide {
   0%   { opacity: 0; transform: translateX(110%) scale(0.88); }
   55%  { opacity: 1; transform: translateX(-6px) scale(1.02); }
   100% { opacity: 1; transform: translateX(0)    scale(1); }
 }
 
-/* ── 22. Scrollbar ────────────────────────────────────────────────────────── */
+/* â”€â”€ 22. Scrollbar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 ::-webkit-scrollbar       { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(0,212,245,0.30), rgba(8,145,178,0.22)); border-radius: 6px; }
 ::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, var(--theme), var(--theme-dark)); }
 
-/* ── 23. Hunt badge ───────────────────────────────────────────────────────── */
+/* â”€â”€ 23. Hunt badge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .hunt-badge { background: linear-gradient(135deg, var(--theme-dark), var(--theme)) !important; }
 @keyframes badgePulse {
   0%,100% { box-shadow: 0 0 0 0 rgba(0,212,245,0.45); }
   50%     { box-shadow: 0 0 0 5px rgba(0,212,245,0); }
 }
 
-/* ── 24. Image thumbnails ─────────────────────────────────────────────────── */
+/* â”€â”€ 24. Image thumbnails â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .img-thumb-wrap:hover           { border-color: var(--theme) !important; box-shadow: 0 0 0 2px rgba(0,212,245,0.25) !important; }
 .img-thumb-wrap.img-thumb-primary { border-color: var(--theme) !important; box-shadow: 0 0 0 2px rgba(0,212,245,0.30) !important; }
 
-/* ── 25. Category badge default ───────────────────────────────────────────── */
+/* â”€â”€ 25. Category badge default â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cc-default { background: rgba(0,212,245,0.08) !important; color: var(--theme-light) !important; border-color: rgba(0,212,245,0.22) !important; }
 
-/* ── 26. Light mode scrollbar ─────────────────────────────────────────────── */
+/* â”€â”€ 26. Light mode scrollbar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light-mode ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(8,145,178,0.40), rgba(6,182,212,0.30)); }
 
 /* ==========================================================================
-   ZHunter PRO — BUTTON & LOGO REFINEMENTS
+   ZHunter PRO â€” BUTTON & LOGO REFINEMENTS
    Removes cheap AI-cliche effects. Clean professional look.
    ========================================================================== */
 
-/* ── Logo icon — clean badge style, no pulsing circle ───────────────────── */
+/* â”€â”€ Logo icon â€” clean badge style, no pulsing circle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .brand-logo-glow {
   display: none !important;   /* Remove the pulsing radial blob entirely */
 }
@@ -7618,7 +7640,7 @@ body.light-mode ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, 
   transform: scale(1.04) !important;
 }
 
-/* ── AI button — professional clean style, no spinning emoji ────────────── */
+/* â”€â”€ AI button â€” professional clean style, no spinning emoji â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .btn-ai-magic {
   background: linear-gradient(135deg, rgba(0,212,245,0.08) 0%, rgba(8,145,178,0.06) 100%) !important;
   border: 1px solid rgba(0,212,245,0.22) !important;
@@ -7649,7 +7671,7 @@ body.light-mode ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, 
 .btn-ai-magic:hover::before { opacity: 1; }
 .btn-ai-magic:active { transform: translateY(0) scale(0.98) !important; }
 
-/* ── Stop sparkle rotating — just static ────────────────────────────────── */
+/* â”€â”€ Stop sparkle rotating â€” just static â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .ai-sparkle {
   animation: none !important;
   font-size: 14px !important;
@@ -7657,7 +7679,7 @@ body.light-mode ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, 
   transform: none !important;
 }
 
-/* ── AI pulse loading — subtle, not flashy ───────────────────────────────── */
+/* â”€â”€ AI pulse loading â€” subtle, not flashy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @keyframes aiPulse {
   0%,100% { opacity: 0.65; }
   50%     { opacity: 1.00; }
@@ -7666,14 +7688,14 @@ body.light-mode ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, 
   animation: aiPulse 1.6s ease-in-out infinite !important;
 }
 
-/* ── Primary action buttons — clean flat style ───────────────────────────── */
+/* â”€â”€ Primary action buttons â€” clean flat style â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .btn {
   font-weight: 600 !important;
   letter-spacing: 0.15px !important;
   border-radius: 8px !important;
 }
 
-/* ── btn-theme: solid cyan, not too loud ─────────────────────────────────── */
+/* â”€â”€ btn-theme: solid cyan, not too loud â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .btn-theme {
   background: linear-gradient(135deg, #0891b2 0%, #0ea5e9 100%) !important;
   border: none !important;
@@ -7692,7 +7714,7 @@ body.light-mode ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, 
   box-shadow: 0 1px 6px rgba(8,145,178,0.25) !important;
 }
 
-/* ── btn-ghost / secondary ───────────────────────────────────────────────── */
+/* â”€â”€ btn-ghost / secondary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .btn-ghost, .btn-secondary {
   background: rgba(255,255,255,0.05) !important;
   border: 1px solid rgba(255,255,255,0.10) !important;
@@ -7704,7 +7726,7 @@ body.light-mode ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, 
   color: var(--tx-1) !important;
 }
 
-/* ── Danger button — deep, clean red ─────────────────────────────────────── */
+/* â”€â”€ Danger button â€” deep, clean red â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .btn-danger {
   background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%) !important;
   border: none !important;
@@ -7717,19 +7739,19 @@ body.light-mode ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, 
   transform: translateY(-1px);
 }
 
-/* ── Hunt main button — professional bordered style ──────────────────────── */
+/* â”€â”€ Hunt main button â€” professional bordered style â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .btn-hunt-main {
   border-radius: 10px !important;
   border-width: 1.5px !important;
 }
 
-/* ── Remove logo glow animation keyframe entirely ────────────────────────── */
+/* â”€â”€ Remove logo glow animation keyframe entirely â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @keyframes logoGlowPulse {
   0%,100% { opacity: 0; }
   50%      { opacity: 0; }
 }
 
-/* ── Header buttons — clean squares, no weird rotation on Settings ───────── */
+/* â”€â”€ Header buttons â€” clean squares, no weird rotation on Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .hdr-btn {
   border-radius: 8px !important;
   width: 34px !important;
@@ -7744,11 +7766,11 @@ body.light-mode ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, 
 }
 
 /* ==========================================================================
-   ZHunter PRO — PROFESSIONAL LIGHT MODE OVERHAUL
-   Clean slate-blue light theme — consistent header-to-content styling.
+   ZHunter PRO â€” PROFESSIONAL LIGHT MODE OVERHAUL
+   Clean slate-blue light theme â€” consistent header-to-content styling.
    ========================================================================== */
 
-/* ── Light mode colour system ────────────────────────────────────────────── */
+/* â”€â”€ Light mode colour system â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light-mode {
   --bg-base:      #f0f4f8;
   --bg-surface:   #e8eef5;
@@ -7775,12 +7797,12 @@ body.light-mode {
   --sh-md: 0 4px 16px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.06);
 }
 
-/* ── Light body ───────────────────────────────────────────────────────────── */
+/* â”€â”€ Light body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light-mode {
   background: var(--bg-base) !important;
 }
 
-/* ── Light header — slate-blue, NOT white ────────────────────────────────── */
+/* â”€â”€ Light header â€” slate-blue, NOT white â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light-mode .app-header {
   background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0c2340 100%) !important;
   border-bottom: 1px solid rgba(14,165,233,0.22) !important;
@@ -7800,7 +7822,7 @@ body.light-mode .app-header::after {
     transparent 100%) !important;
 }
 
-/* ── Keep header text white in light mode ────────────────────────────────── */
+/* â”€â”€ Keep header text white in light mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light-mode .brand-name {
   background: linear-gradient(125deg, #dff6ff 0%, #67e8f9 100%) !important;
   -webkit-background-clip: text !important;
@@ -7817,7 +7839,7 @@ body.light-mode .brand-pro {
 body.light-mode .brand-sub  { color: rgba(255,255,255,0.55) !important; }
 body.light-mode .brand-version { color: rgba(255,255,255,0.45) !important; }
 
-/* ── Stat pill in light mode ─────────────────────────────────────────────── */
+/* â”€â”€ Stat pill in light mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light-mode .stat-pill {
   background: rgba(255,255,255,0.12) !important;
   border-color: rgba(56,189,248,0.40) !important;
@@ -7825,7 +7847,7 @@ body.light-mode .stat-pill {
   box-shadow: 0 0 0 1px rgba(56,189,248,0.20) !important;
 }
 
-/* ── Header buttons in light mode (keep dark style) ──────────────────────── */
+/* â”€â”€ Header buttons in light mode (keep dark style) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light-mode .hdr-btn {
   background: rgba(255,255,255,0.08) !important;
   border-color: rgba(255,255,255,0.15) !important;
@@ -7838,7 +7860,7 @@ body.light-mode .hdr-btn:hover {
   box-shadow: 0 0 10px rgba(56,189,248,0.20) !important;
 }
 
-/* ── Tab bar — light slate ────────────────────────────────────────────────── */
+/* â”€â”€ Tab bar â€” light slate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light-mode .tab-nav {
   background: #e2eaf3 !important;
   border-bottom: 1px solid rgba(0,0,0,0.08) !important;
@@ -7849,13 +7871,13 @@ body.light-mode .tab-btn:hover  { background: rgba(8,145,178,0.08) !important; c
 body.light-mode .tab-btn.active { background: rgba(8,145,178,0.12) !important; color: #0369a1 !important; font-weight: 700 !important; }
 body.light-mode .tab-btn.active svg { color: #0891b2 !important; }
 
-/* ── Content area ─────────────────────────────────────────────────────────── */
+/* â”€â”€ Content area â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light-mode .content-area,
 body.light-mode .tab-panel {
   background: transparent !important;
 }
 
-/* ── Light cards ──────────────────────────────────────────────────────────── */
+/* â”€â”€ Light cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light-mode .link-card,
 body.light-mode .opt-card,
 body.light-mode .collect-card,
@@ -7878,7 +7900,7 @@ body.light-mode .link-card.selected {
   box-shadow: 0 0 0 1px rgba(8,145,178,0.20) !important;
 }
 
-/* ── Light inputs ─────────────────────────────────────────────────────────── */
+/* â”€â”€ Light inputs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light-mode .inp {
   background: #ffffff !important;
   border-color: rgba(0,0,0,0.12) !important;
@@ -7891,7 +7913,7 @@ body.light-mode .inp:focus  {
 }
 body.light-mode .inp::placeholder { color: #94a3b8 !important; }
 
-/* ── Light selects ────────────────────────────────────────────────────────── */
+/* â”€â”€ Light selects â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light-mode .sel {
   background-color: #ffffff !important;
   border-color: rgba(0,0,0,0.12) !important;
@@ -7900,7 +7922,7 @@ body.light-mode .sel {
 body.light-mode .sel:focus { border-color: #0891b2 !important; box-shadow: 0 0 0 3px rgba(8,145,178,0.14) !important; }
 body.light-mode .sel option { background: #ffffff !important; color: #0f172a !important; }
 
-/* ── Light buttons ────────────────────────────────────────────────────────── */
+/* â”€â”€ Light buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light-mode .btn-theme {
   background: linear-gradient(135deg, #0369a1 0%, #0891b2 100%) !important;
   color: #ffffff !important;
@@ -7942,14 +7964,14 @@ body.light-mode .ico-btn:hover {
   color: #0369a1 !important;
 }
 
-/* ── Light progress bar ───────────────────────────────────────────────────── */
+/* â”€â”€ Light progress bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light-mode .bulk-prog-bar {
   background: #e2eaf3 !important;
   border-color: rgba(0,0,0,0.08) !important;
   box-shadow: inset 0 1px 3px rgba(0,0,0,0.10) !important;
 }
 
-/* ── Light scrollbar ──────────────────────────────────────────────────────── */
+/* â”€â”€ Light scrollbar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light-mode ::-webkit-scrollbar-thumb {
   background: linear-gradient(180deg, rgba(8,145,178,0.35), rgba(14,165,233,0.25)) !important;
 }
@@ -7957,7 +7979,7 @@ body.light-mode ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, #0891b2, #0ea5e9) !important;
 }
 
-/* ── Light modal ──────────────────────────────────────────────────────────── */
+/* â”€â”€ Light modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light-mode .modal-backdrop { background: rgba(15,23,42,0.60) !important; }
 body.light-mode .modal {
   background: #ffffff !important;
@@ -7965,14 +7987,14 @@ body.light-mode .modal {
   box-shadow: 0 20px 60px rgba(0,0,0,0.20), 0 0 0 1px rgba(0,0,0,0.06) !important;
 }
 
-/* ── Light logo border ─────────────────────────────────────────────────────  */
+/* â”€â”€ Light logo border â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€  */
 body.light-mode .brand-logo-img {
   box-shadow:
     0 0 0 1.5px rgba(56,189,248,0.50),
     0 4px 14px rgba(0,0,0,0.30) !important;
 }
 
-/* ── Light meta pills ─────────────────────────────────────────────────────── */
+/* â”€â”€ Light meta pills â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 body.light-mode .meta-pill { background: #f1f5f9 !important; border-color: rgba(0,0,0,0.08) !important; color: #475569 !important; }
 body.light-mode .mp-price  { color: #0369a1 !important; }
 body.light-mode .mp-video  { background: rgba(8,145,178,0.07) !important; color: #0369a1 !important; border-color: rgba(8,145,178,0.18) !important; }

@@ -665,12 +665,15 @@ function initBulkSettings() {
   });
 
   // ── Column toggles grid ──
+  // Columns that are ON by default
+  const DEFAULT_ON = new Set(['title', 'url', 'price']);
+
   const ALL_BULK_COLS_OPT = [
     { key: 'no',          label: '#'              },
-    { key: 'title',       label: 'Title'          },
-    { key: 'url',         label: 'Source URL'     },
+    { key: 'title',       label: 'Tital'          },
+    { key: 'url',         label: 'Soursing link'  },
     { key: 'platform',    label: 'Platform'       },
-    { key: 'price',       label: 'Source Price'   },
+    { key: 'price',       label: 'Price'          },
     { key: 'labelCost',   label: 'Label Cost'     },
     { key: 'listPrice',   label: 'List Price'     },
     { key: 'profit',      label: 'Profit'         },
@@ -696,9 +699,16 @@ function initBulkSettings() {
     // Merge standard columns with custom columns
     const allCols = [...ALL_BULK_COLS_OPT, ...customCols];
     
+    const hasSavedPrefs = Object.keys(prefs).length > 0;
     allCols.forEach(col => {
       const isCustom = customCols.some(c => c.key === col.key);
-      const checked = prefs[col.key] !== false;
+      // Default ON: title, url, price — everything else OFF by default
+      let checked;
+      if (hasSavedPrefs) {
+        checked = prefs[col.key] === true || (prefs[col.key] === undefined && DEFAULT_ON.has(col.key));
+      } else {
+        checked = DEFAULT_ON.has(col.key);
+      }
       const item = document.createElement('label');
       item.className = 'opt-col-item' + (checked ? ' on' : '') + (isCustom ? ' custom-col' : '');
       
@@ -733,7 +743,7 @@ function initBulkSettings() {
         if (e.target.classList.contains('opt-col-del')) return;
         e.preventDefault();
         const newPrefs = { ...prefs };
-        newPrefs[col.key] = !(newPrefs[col.key] !== false);
+        newPrefs[col.key] = !checked;  // toggle based on current state
         const ok = await saveSettings({ bulkSheetColumns: newPrefs });
         if (ok) {
           currentSettings.bulkSheetColumns = newPrefs;
@@ -796,6 +806,24 @@ function initBulkSettings() {
       if (e.key === 'Enter') {
         e.preventDefault();
         addCustomColBtn.click();
+      }
+    });
+  }
+
+  // ── Reset columns to defaults (Tital, Soursing link, Price only) ──
+  const resetColsBtn = $('resetColsBtn');
+  if (resetColsBtn) {
+    resetColsBtn.addEventListener('click', async () => {
+      // Clear saved prefs → getEnabledColumns() will fall back to DEFAULT_ON_COLS
+      const ok = await saveSettings({ bulkSheetColumns: {} });
+      if (ok) {
+        currentSettings.bulkSheetColumns = {};
+        renderColGrid();
+        if (colStatus) {
+          colStatus.classList.remove('hidden', 'error');
+          colStatus.textContent = '✓ Reset to defaults (Tital, Soursing link, Price)';
+          setTimeout(() => colStatus.classList.add('hidden'), 2500);
+        }
       }
     });
   }
