@@ -1,19 +1,19 @@
-// ============================================================
-// ZHunter PRO v7.9.15 — Content Script
+﻿// ============================================================
+// ZHunter PRO v7.9.15 â€” Content Script
 // ============================================================
 // Fixes vs 7.6.0:
-//   • Issue 1: Correct price extraction — reads full price string
+//   â€¢ Issue 1: Correct price extraction â€” reads full price string
 //     (whole + fractional) directly from DOM; JSON harvest no longer
 //     picks up unrelated numeric price fields (uses currency-bearing
 //     string fields only when they originate from offer/price keys).
-//   • Issue 2: Stronger isBadImage() — blocks logos, platform chrome,
+//   â€¢ Issue 2: Stronger isBadImage() â€” blocks logos, platform chrome,
 //     UI sprites, tiny icons, header/footer/nav/banner images. DOM-
 //     position-aware filtering rejects images outside the main product
 //     gallery container.
-//   • Issue 3: Universal e-commerce scraper covers Flipkart, Noon,
+//   â€¢ Issue 3: Universal e-commerce scraper covers Flipkart, Noon,
 //     WooCommerce, BigCommerce, and any site exposing schema.org/JSON-LD
-//     Product or Offer markup — no per-site hardcoding needed.
-//   • Issue 4: Gallery-scoped image collection — images are collected
+//     Product or Offer markup â€” no per-site hardcoding needed.
+//   â€¢ Issue 4: Gallery-scoped image collection â€” images are collected
 //     only from the main product display area (hero + thumbnails).
 //     Description sections, review carousels, upsell grids, footer
 //     banners are all excluded.
@@ -27,20 +27,20 @@ const IMG_CAP = 15;
 const VID_CAP = 12;
 
 // FIX: Cache the harvestInlineJson result per page load.
-// On complex pages (Next.js/Walmart/Amazon) the inline scripts can be 500 KB–2 MB.
-// Re-parsing them on every SCRAPE_PAGE message caused 200–500 ms freezes.
+// On complex pages (Next.js/Walmart/Amazon) the inline scripts can be 500 KBâ€“2 MB.
+// Re-parsing them on every SCRAPE_PAGE message caused 200â€“500 ms freezes.
 let _harvestCache = null;
 
-// ── Basics ──────────────────────────────────────────────────
+// â”€â”€ Basics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const absUrl = u => { try { return new URL(u, location.href).href; } catch (_) { return u || ''; } };
 const host   = () => { try { return location.hostname.toLowerCase().replace(/^www\./, ''); } catch (_) { return ''; } };
 
-// ── Price Cleaner ────────────────────────────────────────────
+// â”€â”€ Price Cleaner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Strips discount noise and returns the FIRST standalone price token found.
 function cleanPriceText(raw) {
   if (!raw || typeof raw !== 'string') return '';
   let s = raw
-    .replace(/[-−]\s*\d{1,3}\s*%/g, '')
+    .replace(/[-âˆ’]\s*\d{1,3}\s*%/g, '')
     .replace(/\d{1,3}\s*%\s*off/gi, '')
     .replace(/\(\s*\d{1,3}\s*%\s*\)/g, '')
     .replace(/save\s+\$?\d[\d.,]*/gi, '')
@@ -54,8 +54,8 @@ function cleanPriceText(raw) {
     .trim();
 
   const patterns = [
-    /[$£€¥₹₩]\s*\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?/,
-    /\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?\s*[$£€¥₹₩]/,
+    /[$Â£â‚¬Â¥â‚¹â‚©]\s*\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?/,
+    /\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?\s*[$Â£â‚¬Â¥â‚¹â‚©]/,
     /(?:USD|CAD|AUD|GBP|EUR|PKR|INR)\s*\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?/i,
     /\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?/
   ];
@@ -68,10 +68,10 @@ function cleanPriceText(raw) {
 
 function ensureCurrency(p, symbol) {
   if (!p) return '';
-  // Already has a currency symbol or code — return as-is
-  if (/^[$£€¥₹₩]/.test(p)) return p;
+  // Already has a currency symbol or code â€” return as-is
+  if (/^[$Â£â‚¬Â¥â‚¹â‚©]/.test(p)) return p;
   if (/^(USD|CAD|AUD|GBP|EUR|PKR|INR)/i.test(p)) return p;
-  if (/[$£€¥₹₩]$/.test(p)) return p;
+  if (/[$Â£â‚¬Â¥â‚¹â‚©]$/.test(p)) return p;
   // Use detected symbol from page, or fall back to $
   return `${symbol || '$'}${p}`;
 }
@@ -84,19 +84,19 @@ function detectPageCurrencySymbol() {
   );
   for (const el of priceEls) {
     const txt = el.textContent || '';
-    const m = txt.match(/[$£€¥₹₩]/);
+    const m = txt.match(/[$Â£â‚¬Â¥â‚¹â‚©]/);
     if (m) return m[0];
   }
   // Fallback: look in meta tags
   const meta = document.querySelector('meta[property="product:price:currency"], meta[itemprop="priceCurrency"]');
   if (meta?.content) {
-    const map = { USD: '$', GBP: '£', EUR: '€', JPY: '¥', INR: '₹', KRW: '₩', CAD: 'CA$', AUD: 'AU$' };
+    const map = { USD: '$', GBP: 'Â£', EUR: 'â‚¬', JPY: 'Â¥', INR: 'â‚¹', KRW: 'â‚©', CAD: 'CA$', AUD: 'AU$' };
     return map[meta.content.toUpperCase()] || meta.content + ' ';
   }
   return '$';
 }
 
-// ── Image quality / dedup helpers ────────────────────────────
+// â”€â”€ Image quality / dedup helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function normalizeImg(rawUrl) {
   try {
     const u = new URL(absUrl(rawUrl));
@@ -170,7 +170,7 @@ function canonImageKey(url) {
   } catch (_) { return String(url || '').toLowerCase(); }
 }
 
-// ── ISSUE 2 & 4 FIX: Stronger image bad-image filter ────────
+// â”€â”€ ISSUE 2 & 4 FIX: Stronger image bad-image filter â”€â”€â”€â”€â”€â”€â”€â”€
 function isBadImage(url) {
   if (!url) return true;
   const s = String(url).toLowerCase();
@@ -178,7 +178,7 @@ function isBadImage(url) {
   if (s.startsWith('data:image/svg') || s.endsWith('.svg')) return true;
   if (/PHN2Z/.test(s)) return true; // base64 svg
 
-  // ── Keyword-based exclusions (expanded) ──────────────────
+  // â”€â”€ Keyword-based exclusions (expanded) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (/\b(logo|logos|sprite|sprites|favicon|avatar|placeholder|spacer|pixel|blank|loading|tracking|banner|header|footer|badge|watermark|branding|navbar|navigation|overlay|spinner|advertisement|ribbon|sticker)\b/.test(s)) return true;
   if (/\/icon\/|\/icons\/|[_-]icon[_.@-]|icon[_.@-]\d|\/nav\/|\/menu\/|\/cart\/|\/checkout\/|\/ad[-_]|payment[-_]icon|payment[-_]method|trust[-_]badge|trust[-_]seal/.test(s)) return true;
   if (/hero[-_]banner|promo[-_]banner|category[-_]banner|category[-_]image|\/department\/|\/category\/|\/brand\/|brand[-_]logo|\/circular\/|\/hero\/|\/search\/|search[-_]icon/.test(s)) return true;
@@ -194,11 +194,11 @@ function isBadImage(url) {
   // Amazon non-product
   if (/ssl-images-amazon\.com/i.test(s) && /\/G\/|\/transparent\.|\/buttons?\/|\/ui\/|\/nav\//.test(s)) return true;
 
-  // Walmart non-product — block spark logo, app/delivery/store icons, badges, category images
+  // Walmart non-product â€” block spark logo, app/delivery/store icons, badges, category images
   if (/walmartimages\.com/i.test(s) && /\/spark\/|\/store\/|\/logo\/|\/icon\/|\/badge\/|\/footer\/|\/header\/|\/delivery\/|\/app\/|\/promo\/|\/circular\/|\/dept\/|\/category\/|\/brand\/|\/nav\/|\/hero\/|\/banner\//.test(s)) return true;
   // Walmart image filenames that are clearly UI chrome
   if (/walmartimages\.com/i.test(s) && /spark[-_]logo|walmart[-_]logo|wm[-_]logo|wm[-_]app|delivery[-_]icon|pickup[-_]icon|store[-_]icon/.test(s)) return true;
-  // Walmart inline JSON image patterns — small base64-encoded images from JSON are always UI
+  // Walmart inline JSON image patterns â€” small base64-encoded images from JSON are always UI
   if (/walmartimages\.com/i.test(s) && /\/\d{2,3}x\d{2,3}[?/]/.test(s)) return true;
 
   // Sam's Club non-product
@@ -213,7 +213,7 @@ function isBadImage(url) {
   return false;
 }
 
-// ── DOM-context bad-image check ──────────────────────────────
+// â”€â”€ DOM-context bad-image check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Returns true if the <img> element sits inside a non-product DOM region.
 function isBadImageElement(imgEl) {
   if (!imgEl) return false;
@@ -235,7 +235,7 @@ function isBadImageElement(imgEl) {
   return !!badParent;
 }
 
-// ── ISSUE 4 FIX: Find the main product gallery container ────
+// â”€â”€ ISSUE 4 FIX: Find the main product gallery container â”€â”€â”€â”€
 // Returns the DOM element that wraps the primary product image area,
 // or null if we cannot confidently identify one.
 function findProductGalleryContainer() {
@@ -291,7 +291,7 @@ function findProductGalleryContainer() {
     '[class*="product-image"]',
     // Etsy
     '.listing-page-image-carousel',
-    // Generic fallback — look for any element that contains multiple images
+    // Generic fallback â€” look for any element that contains multiple images
     // and is positioned in the upper portion of the page
     '[class*="media-gallery"]',
     '[class*="MediaGallery"]',
@@ -307,7 +307,7 @@ function findProductGalleryContainer() {
   }
 
   // Heuristic fallback: find the first element that contains
-  // ≥2 images all with naturalWidth > 150, is within the top 60% of the page,
+  // â‰¥2 images all with naturalWidth > 150, is within the top 60% of the page,
   // and is not inside a recommendations / reviews / footer section.
   const badAncestorSel =
     '[class*="recommend"], [class*="similar"], [class*="related"], ' +
@@ -355,7 +355,7 @@ function dedupeImages(arr) {
   return out;
 }
 
-// ── Video helpers ───────────────────────────────────────────
+// â”€â”€ Video helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const VID_REGEX = /\.(mp4|webm|m3u8)([\?#]|$)/i;
 const YT_REGEX  = /(youtube\.com\/(watch|embed|shorts|live)|youtu\.be\/)/i;
 
@@ -397,7 +397,7 @@ function dedupeVideos(arr) {
   return out;
 }
 
-// ── DOM image collection ────────────────────────────────────
+// â”€â”€ DOM image collection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function pickImgSrc(img) {
   return (
     img.getAttribute('data-old-hires') ||
@@ -491,7 +491,7 @@ function collectLiveMarketplaceImages(platform) {
   return out;
 }
 
-// ── DOM video collection ────────────────────────────────────
+// â”€â”€ DOM video collection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function collectDomVideos() {
   const out = [];
   document.querySelectorAll('video').forEach(v => {
@@ -513,7 +513,7 @@ function collectDomVideos() {
   return out;
 }
 
-// ── Deep JSON media walker ────────────────────────────────────
+// â”€â”€ Deep JSON media walker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // ISSUE 1 FIX: Only pick up price from offer/price-typed string fields
 // that already contain a currency symbol (e.g. "$29.98"), not bare numbers.
 // Bare numeric prices from JSON are unreliable and cause wrong price bugs.
@@ -541,7 +541,7 @@ function walkJsonForMedia(rootJson, found) {
       for (const [k, v] of Object.entries(json)) {
         if (typeof v === 'string') {
           if (!found.price && /^(price|currentPrice|salePrice|displayPrice|priceFormatted|formattedPrice|currentPriceFormatted)$/i.test(k)) {
-            if (/[$£€¥₹₩]/.test(v) && /\d/.test(v)) {
+            if (/[$Â£â‚¬Â¥â‚¹â‚©]/.test(v) && /\d/.test(v)) {
               const cleaned = cleanPriceText(v);
               if (cleaned) found.price = cleaned;
             }
@@ -576,7 +576,7 @@ async function harvestInlineJson() {
     found.videos.push(clean);
   };
 
-  // ── PRODUCT IDENTITY ANCHOR ─────────────────────────────────
+  // â”€â”€ PRODUCT IDENTITY ANCHOR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Derive a short fingerprint from the current page URL path so we can
   // reject images that belong to unrelated products embedded in the same
   // JSON blob (e.g. "Customers also bought" carousels on Amazon/Walmart).
@@ -618,14 +618,14 @@ async function harvestInlineJson() {
   // When we have a product key, reject images whose path contains a DIFFERENT
   // product ID of the same format (e.g. different ASIN embedded in image URL).
   function isLikelyCurrentProduct(imgUrl) {
-    if (!productPathKey || productPathKey.length < 6) return true; // no key → accept all
+    if (!productPathKey || productPathKey.length < 6) return true; // no key â†’ accept all
     try {
       const path = new URL(imgUrl).pathname.toLowerCase();
-      // If the key appears in the image path → definitely this product
+      // If the key appears in the image path â†’ definitely this product
       if (path.includes(productPathKey)) return true;
       // Amazon images embed the ASIN in their path. If there's a different
       // ASIN-like segment (10 uppercase alphanum chars) in the image path,
-      // reject it — it belongs to another product.
+      // reject it â€” it belongs to another product.
       if (/media-amazon\.com|ssl-images-amazon/i.test(imgUrl)) {
         const asinMatch = path.match(/\/([A-Z0-9]{10})\//i);
         if (asinMatch && asinMatch[1].toLowerCase() !== productPathKey) return false;
@@ -683,7 +683,7 @@ async function harvestInlineJson() {
       addFoundVideo(m[0]);
   }
 
-  // JSON-LD offer price — only use currency-bearing string prices
+  // JSON-LD offer price â€” only use currency-bearing string prices
   if (!found.price) {
     document.querySelectorAll('script[type="application/ld+json"]').forEach(s => {
       try {
@@ -700,7 +700,7 @@ async function harvestInlineJson() {
               const currency = o.priceCurrency || o.priceSpecification?.priceCurrency || '';
               if (rawPrice !== undefined && rawPrice !== null && rawPrice !== '') {
                 // Map currency code to symbol for display
-                const symMap = { USD: '$', GBP: '£', EUR: '€', JPY: '¥', INR: '₹', KRW: '₩', CAD: 'CA$', AUD: 'AU$', PKR: '₨' };
+                const symMap = { USD: '$', GBP: 'Â£', EUR: 'â‚¬', JPY: 'Â¥', INR: 'â‚¹', KRW: 'â‚©', CAD: 'CA$', AUD: 'AU$', PKR: 'â‚¨' };
                 const sym = symMap[currency.toUpperCase()] || (currency ? currency + ' ' : '$');
                 found.price = `${sym}${rawPrice}`.replace(/\s+/g, '');
                 break;
@@ -714,7 +714,7 @@ async function harvestInlineJson() {
     });
   }
 
-  // ── POST-HARVEST PRODUCT FILTER ────────────────────────────
+  // â”€â”€ POST-HARVEST PRODUCT FILTER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Remove images that belong to other products embedded in the JSON
   // (related/upsell carousels, "also bought" grids, etc.)
   if (productPathKey) {
@@ -737,7 +737,7 @@ async function harvestInlineJson() {
   return found;
 }
 
-// ── Variants ─────────────────────────────────────────────────
+// â”€â”€ Variants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function collectVariants() {
   const out = [];
   document.querySelectorAll(
@@ -746,14 +746,14 @@ function collectVariants() {
     'button[aria-label*="Size" i], button[aria-label*="Color" i]'
   ).forEach(el => {
     const t = (el.innerText || el.textContent || el.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim();
-    if (t && t.length < 80 && !/^(select|choose|undefined|—|-)$/i.test(t) && !out.includes(t)) {
+    if (t && t.length < 80 && !/^(select|choose|undefined|â€”|-)$/i.test(t) && !out.includes(t)) {
       out.push(t);
     }
   });
   return out.slice(0, 20);
 }
 
-// ── Generic price lookup ─────────────────────────────────────
+// â”€â”€ Generic price lookup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function priceFromSelectors(selectors) {
   for (const sel of selectors) {
     for (const el of document.querySelectorAll(sel)) {
@@ -770,16 +770,16 @@ function priceFromSelectors(selectors) {
   return '';
 }
 
-// ── Sam's Club precise price reader (v2) ─────────────────────
+// â”€â”€ Sam's Club precise price reader (v2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Sam's Club 2024/2025: price can be in multiple formats.
-// Priority: aria-label → structured data → characteristic+mantissa → JSON-LD → script
-// ── Sam's Club precise price reader (v3 — fully rewritten) ───
-// Priority order: aria-label → split-price DOM → meta itemprop →
-//   JSON-LD → __NEXT_DATA__ deep walk → inline script regex fallback
+// Priority: aria-label â†’ structured data â†’ characteristic+mantissa â†’ JSON-LD â†’ script
+// â”€â”€ Sam's Club precise price reader (v3 â€” fully rewritten) â”€â”€â”€
+// Priority order: aria-label â†’ split-price DOM â†’ meta itemprop â†’
+//   JSON-LD â†’ __NEXT_DATA__ deep walk â†’ inline script regex fallback
 function readSamsClubPrice() {
   const sym = detectPageCurrencySymbol() || '$';
 
-  // ── 1. aria-label on price wrapper elements ────────────────
+  // â”€â”€ 1. aria-label on price wrapper elements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const ariaEls = document.querySelectorAll(
     'span[aria-label], [data-testid="product-price"], [data-automation-id="product-price"], ' +
     '[class*="PriceDisplay"] span[aria-label], [class*="price-display"] span[aria-label], ' +
@@ -792,7 +792,7 @@ function readSamsClubPrice() {
     if (c && /\d/.test(c)) return ensureCurrency(c, sym);
   }
 
-  // ── 2. Split-price: characteristic + mantissa ──────────────
+  // â”€â”€ 2. Split-price: characteristic + mantissa â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const charEl = document.querySelector(
     '.Price-characteristic, [class*="Price-characteristic"], [class*="price-characteristic"], ' +
     '[class*="priceCharacteristic"], [class*="PriceCharacteristic"]'
@@ -807,7 +807,7 @@ function readSamsClubPrice() {
     if (whole) return frac ? `${sym}${whole}.${frac}` : `${sym}${whole}`;
   }
 
-  // ── 3. itemprop="price" ────────────────────────────────────
+  // â”€â”€ 3. itemprop="price" â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const itmProp = document.querySelector('[itemprop="price"]');
   if (itmProp) {
     const raw = itmProp.getAttribute('content') || itmProp.innerText || itmProp.textContent || '';
@@ -815,7 +815,7 @@ function readSamsClubPrice() {
     if (c && /\d/.test(c)) return ensureCurrency(c, sym);
   }
 
-  // ── 4. JSON-LD offer price ─────────────────────────────────
+  // â”€â”€ 4. JSON-LD offer price â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
     try {
       const root = JSON.parse(s.textContent || '{}');
@@ -829,7 +829,7 @@ function readSamsClubPrice() {
           for (const of_ of arr) {
             const p = of_.price || of_.lowPrice;
             if (p !== undefined && p !== null && p !== '') {
-              const symMap = { USD:'$', GBP:'£', EUR:'€', JPY:'¥', INR:'₹', KRW:'₩', CAD:'CA$', AUD:'AU$' };
+              const symMap = { USD:'$', GBP:'Â£', EUR:'â‚¬', JPY:'Â¥', INR:'â‚¹', KRW:'â‚©', CAD:'CA$', AUD:'AU$' };
               const cur = of_.priceCurrency || '';
               const cs = symMap[cur.toUpperCase()] || sym;
               return `${cs}${p}`;
@@ -841,7 +841,7 @@ function readSamsClubPrice() {
     } catch (_) {}
   }
 
-  // ── 5. __NEXT_DATA__ deep walk ─────────────────────────────
+  // â”€â”€ 5. __NEXT_DATA__ deep walk â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const nextEl = document.getElementById('__NEXT_DATA__');
   if (nextEl) {
     try {
@@ -900,7 +900,7 @@ function readSamsClubPrice() {
     } catch (_) {}
   }
 
-  // ── 6. Inline script regex fallback ───────────────────────
+  // â”€â”€ 6. Inline script regex fallback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   for (const s of document.querySelectorAll('script:not([src])')) {
     const t = s.textContent || '';
     if (t.length < 50 || t.length > 3_000_000) continue;
@@ -909,7 +909,7 @@ function readSamsClubPrice() {
     if (m && parseFloat(m[1]) > 0) return `${sym}${parseFloat(m[1]).toFixed(2)}`;
   }
 
-  // ── 7. Generic DOM fallback ────────────────────────────────
+  // â”€â”€ 7. Generic DOM fallback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const genericSelectors = [
     '[data-testid="price"]', '[data-automation-id="price"]',
     '[class*="price-display"]', '[class*="PriceDisplay"]',
@@ -928,7 +928,7 @@ function readSamsClubPrice() {
 }
 
 
-// ── ISSUE 1 FIX: Walmart precise price reader ────────────────
+// â”€â”€ ISSUE 1 FIX: Walmart precise price reader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function readWalmartPrice() {
   // Prefer aria-label on the price wrapper (has the full formatted price)
   const ariaSelectors = [
@@ -936,8 +936,8 @@ function readWalmartPrice() {
     '[data-automation-id="product-price"] [itemprop="price"]',
     '[data-automation-id="product-price"]',
     'span[aria-label*="$"]',
-    'span[aria-label*="£"]',
-    'span[aria-label*="€"]'
+    'span[aria-label*="Â£"]',
+    'span[aria-label*="â‚¬"]'
   ];
   for (const sel of ariaSelectors) {
     for (const el of document.querySelectorAll(sel)) {
@@ -958,7 +958,7 @@ function readWalmartPrice() {
   return '';
 }
 
-// ── ISSUE 3 FIX: Universal e-commerce price reader ──────────
+// â”€â”€ ISSUE 3 FIX: Universal e-commerce price reader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Reads price from any e-commerce page using a priority waterfall.
 function universalPrice() {
   const sym = detectPageCurrencySymbol();
@@ -1004,9 +1004,9 @@ function universalPrice() {
   return '';
 }
 
-// ──────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //                  PLATFORM SCRAPERS
-// ──────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // ISSUE 4 FIX: All scrapers now collect images from gallery scope only,
 // not from the full document.
@@ -1016,7 +1016,7 @@ function scrapeAmazon() {
 
   const titleEl = document.querySelector('#productTitle, #title span, h1.a-size-large, #title_feature_div #title');
   if (titleEl) r.title = titleEl.innerText.trim();
-  // If DOM title is empty (e.g. page still loading), try og:title — never fall back to document.title
+  // If DOM title is empty (e.g. page still loading), try og:title â€” never fall back to document.title
   // because Amazon sets it to "Adding to Cart..." during cart operations.
   if (!r.title) {
     const og = document.querySelector('meta[property="og:title"]');
@@ -1038,7 +1038,7 @@ function scrapeAmazon() {
     if (w) r.price = `$${w}.${f}`;
   }
 
-  // ── TWO-TIER URL QUALITY STRATEGY ────────────────────────────────────────
+  // â”€â”€ TWO-TIER URL QUALITY STRATEGY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //
   // PROBLEM: Different Amazon JSON keys have different URL quality contracts:
   //   "hiRes"  = true original upload URL (clean or has modifier, always best)
@@ -1046,26 +1046,26 @@ function scrapeAmazon() {
   //   "thumb"  = tiny thumbnail URL
   //
   // WRONG approach (caused the bug): stripping modifier from ALL sources.
-  //   For "hiRes" → strip modifier → clean URL → Amazon serves ORIGINAL ✅
-  //   For "large" → strip modifier → clean URL → Amazon may serve DEFAULT
-  //                 size (e.g. 500px) which is WORSE than the original _SL1500_ ❌
+  //   For "hiRes" â†’ strip modifier â†’ clean URL â†’ Amazon serves ORIGINAL âœ…
+  //   For "large" â†’ strip modifier â†’ clean URL â†’ Amazon may serve DEFAULT
+  //                 size (e.g. 500px) which is WORSE than the original _SL1500_ âŒ
   //
   // CORRECT approach: different treatment per source:
-  //   "hiRes"  → strip modifier → clean URL → original upload quality
-  //   "large"  → replace modifier with _SL1500_ → guaranteed 1500px
-  //   "thumb"  → replace modifier with _SL1500_ → guaranteed 1500px
-  //   raw scan → replace modifier with _SL1500_ → guaranteed 1500px
+  //   "hiRes"  â†’ strip modifier â†’ clean URL â†’ original upload quality
+  //   "large"  â†’ replace modifier with _SL1500_ â†’ guaranteed 1500px
+  //   "thumb"  â†’ replace modifier with _SL1500_ â†’ guaranteed 1500px
+  //   raw scan â†’ replace modifier with _SL1500_ â†’ guaranteed 1500px
   //
-  // This way: products where ALL images have hiRes → original quality for all.
-  //           Products where SOME images have hiRes=null → 1500px for those.
+  // This way: products where ALL images have hiRes â†’ original quality for all.
+  //           Products where SOME images have hiRes=null â†’ 1500px for those.
 
-  // For hiRes source: strip modifier entirely → original upload quality
+  // For hiRes source: strip modifier entirely â†’ original upload quality
   function cleanHiRes(url) {
     if (!url || typeof url !== 'string' || !url.startsWith('http')) return null;
     return url.replace(/\._[A-Za-z0-9_,]+_\./g, '.');
   }
 
-  // For large/thumb/fallback: replace modifier with _SL1500_ → guaranteed 1500px
+  // For large/thumb/fallback: replace modifier with _SL1500_ â†’ guaranteed 1500px
   // NOT stripping, because Amazon may not CDN-cache the original for these paths.
   function upscaleTo1500(url) {
     if (!url || typeof url !== 'string' || !url.startsWith('http')) return null;
@@ -1074,7 +1074,7 @@ function scrapeAmazon() {
 
   const seenKeys = new Set();
 
-  // Add image from hiRes source → original quality
+  // Add image from hiRes source â†’ original quality
   function addHiResImg(url) {
     const clean = cleanHiRes(url);
     if (!clean) return;
@@ -1084,7 +1084,7 @@ function scrapeAmazon() {
     r.images.push(clean);
   }
 
-  // Add image from fallback source → 1500px quality
+  // Add image from fallback source â†’ 1500px quality
   function addFallbackImg(url) {
     const sized = upscaleTo1500(url);
     if (!sized) return;
@@ -1115,7 +1115,7 @@ function scrapeAmazon() {
     });
   });
 
-  // Pass 1: Script tag JSON extraction — only if the visible gallery was empty.
+  // Pass 1: Script tag JSON extraction â€” only if the visible gallery was empty.
   const scripts = document.querySelectorAll('script');
   if (r.images.length === 0) for (const script of scripts) {
     const t = script.textContent || '';
@@ -1124,22 +1124,22 @@ function scrapeAmazon() {
 
     let match;
 
-    // "hiRes" → original quality (strip modifier → clean URL)
+    // "hiRes" â†’ original quality (strip modifier â†’ clean URL)
     const hiResDQ = /"hiRes"\s*:\s*"(https:\/\/[^"]+)"/g;
     while ((match = hiResDQ.exec(t)) !== null) addHiResImg(match[1]);
 
     const hiResSQ = /'hiRes'\s*:\s*'(https:\/\/[^']+)'/g;
     while ((match = hiResSQ.exec(t)) !== null) addHiResImg(match[1]);
 
-    // "large" → 1500px quality (keep/replace with _SL1500_)
+    // "large" â†’ 1500px quality (keep/replace with _SL1500_)
     const largeDQ = /"large"\s*:\s*"(https:\/\/[^"]+)"/g;
     while ((match = largeDQ.exec(t)) !== null) addFallbackImg(match[1]);
 
-    // "thumb" → upscale to 1500px
+    // "thumb" â†’ upscale to 1500px
     const thumbDQ = /"thumb"\s*:\s*"(https:\/\/[^"]+)"/g;
     while ((match = thumbDQ.exec(t)) !== null) addFallbackImg(match[1]);
 
-    // "main":{...} — extract all URLs and upscale to 1500px
+    // "main":{...} â€” extract all URLs and upscale to 1500px
     const mainKeyRegex = /"main"\s*:\s*\{/g;
     let mk;
     while ((mk = mainKeyRegex.exec(t)) !== null) {
@@ -1155,7 +1155,7 @@ function scrapeAmazon() {
     }
   }
 
-  // Pass 2: Raw Amazon CDN URL scan — only if targeted script extraction found nothing.
+  // Pass 2: Raw Amazon CDN URL scan â€” only if targeted script extraction found nothing.
   if (r.images.length === 0) for (const script of scripts) {
     const t = script.textContent || '';
     const rawScan = /https:\/\/(?:m\.media-amazon\.com|images-amazon\.com)\/images\/I\/[A-Za-z0-9%+\-_.]+\.(?:jpg|jpeg|png|webp)/g;
@@ -1194,7 +1194,7 @@ function scrapeAmazon() {
 
 
 
-  // ── AMAZON VIDEO EXTRACTION — Multi-pass with dedup ──────────────────────
+  // â”€â”€ AMAZON VIDEO EXTRACTION â€” Multi-pass with dedup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Amazon embeds video data in several places:
   //   1. Standard mp4/m3u8 URLs in script tags
   //   2. Amazon-specific JSON keys: videoDisplayInfos, videoSrc, immersionVideoUrl, videoCatalogUrl
@@ -1231,7 +1231,7 @@ function scrapeAmazon() {
       for (const m of t.matchAll(/"videoThumbnailUrl"\s*:\s*"(https?:[^"]+\.(?:mp4|m3u8)[^"]*)"/gi)) addAmazonVideo(m[1]);
     }
 
-    // Pass 3: Amazon CDN URLs — aiv-delivery.net and video.media-amazon.com
+    // Pass 3: Amazon CDN URLs â€” aiv-delivery.net and video.media-amazon.com
     // These appear even without .mp4 extension in the URL string.
     if (/aiv-delivery\.net|video\.media-amazon\.com/i.test(t)) {
       for (const m of t.matchAll(/https?:\/\/[^"'\s\\]*(?:aiv-delivery\.net|video\.media-amazon\.com)[^"'\s\\]*/gi))
@@ -1277,7 +1277,7 @@ function scrapeWalmart() {
     return src.split('?')[0]; // strip params universally for clean dedup
   };
 
-  // Strategy 1: __NEXT_DATA__ JSON (most reliable — contains full-res URLs directly)
+  // Strategy 1: __NEXT_DATA__ JSON (most reliable â€” contains full-res URLs directly)
   // ROOT CAUSE of duplicates: Walmart __NEXT_DATA__ embeds the same imageInfo.allImages
   // in MULTIPLE locations (product root + contentLayout modules + variantMap). A generic
   // DFS with early exit can still find two sibling nodes at the same depth.
@@ -1384,14 +1384,14 @@ function scrapeWalmart() {
         });
       }
 
-      // Brightcove: sources[] — array of {src, type}
+      // Brightcove: sources[] â€” array of {src, type}
       if (Array.isArray(obj.sources)) {
         obj.sources.forEach(s => {
           if (s && typeof s.src === 'string') addWmVid(s.src);
         });
       }
 
-      // Brightcove: renditions[] — pick highest quality
+      // Brightcove: renditions[] â€” pick highest quality
       if (Array.isArray(obj.renditions) && obj.renditions.length > 0) {
         const sorted = [...obj.renditions]
           .filter(rd => rd && typeof rd.url === 'string')
@@ -1434,7 +1434,7 @@ function scrapeSamsClub() {
     return src.split('?')[0];
   };
 
-  // Strategy 1: __NEXT_DATA__ JSON — assets[].largeImage or zoomImage (highest quality fields)
+  // Strategy 1: __NEXT_DATA__ JSON â€” assets[].largeImage or zoomImage (highest quality fields)
   // Use targeted path navigation to avoid collecting assets from recommendation panels.
   const nextEl = document.getElementById('__NEXT_DATA__');
   if (nextEl) {
@@ -1509,7 +1509,7 @@ function scrapeSamsClub() {
 
   // Extract videos from __NEXT_DATA__ JSON
   // Sam's Club shares Walmart's Next.js infrastructure BUT uses Brightcove player.
-  // Brightcove stores video in sources[].src and renditions[].url — NOT mediaAssets[].
+  // Brightcove stores video in sources[].src and renditions[].url â€” NOT mediaAssets[].
   try {
     const nd = JSON.parse(document.getElementById('__NEXT_DATA__')?.textContent || '{}');
     const _scVidSeen = new Set();
@@ -1531,14 +1531,14 @@ function scrapeSamsClub() {
         });
       }
 
-      // Brightcove: sources[] — array of {src, type} objects
+      // Brightcove: sources[] â€” array of {src, type} objects
       if (Array.isArray(obj.sources)) {
         obj.sources.forEach(s => {
           if (s && typeof s.src === 'string') addScVid(s.src);
         });
       }
 
-      // Brightcove: renditions[] — pick highest quality (sort by encodingRate desc)
+      // Brightcove: renditions[] â€” pick highest quality (sort by encodingRate desc)
       if (Array.isArray(obj.renditions) && obj.renditions.length > 0) {
         const sorted = [...obj.renditions]
           .filter(rd => rd && typeof rd.url === 'string')
@@ -1555,7 +1555,7 @@ function scrapeSamsClub() {
       Object.values(obj).forEach(v => { if (v && typeof v === 'object') scanScVideos(v, depth + 1); });
     })(nd, 0);
 
-    // Inline <script> scan — catches Brightcove JSON not in __NEXT_DATA__
+    // Inline <script> scan â€” catches Brightcove JSON not in __NEXT_DATA__
     document.querySelectorAll('script:not([src])').forEach(s => {
       const t = s.textContent || '';
       if (t.length < 50 || t.length > 3_000_000) return;
@@ -1578,7 +1578,7 @@ function scrapeFaire() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
   const sym = detectPageCurrencySymbol() || '$';
 
-  // ── Title ──────────────────────────────────────────────────
+  // â”€â”€ Title â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const titleEl = document.querySelector(
     'h1[class*="product"], h1[class*="Product"], h1[class*="title"], h1[class*="Title"], ' +
     '[data-testid*="product-title"], [data-testid*="productTitle"], ' +
@@ -1586,7 +1586,7 @@ function scrapeFaire() {
   );
   if (titleEl) r.title = titleEl.innerText.trim();
 
-  // ── Price: Strategy 1 — __NEXT_DATA__ deep walk (most reliable for Faire) ──
+  // â”€â”€ Price: Strategy 1 â€” __NEXT_DATA__ deep walk (most reliable for Faire) â”€â”€
   const nextDataEl = document.getElementById('__NEXT_DATA__');
   if (nextDataEl) {
     try {
@@ -1651,7 +1651,7 @@ function scrapeFaire() {
     } catch (_) {}
   }
 
-  // ── Price: Strategy 2 — DOM selectors (Faire-specific) ────────────────
+  // â”€â”€ Price: Strategy 2 â€” DOM selectors (Faire-specific) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (!r.price) {
     r.price = priceFromSelectors([
       '[data-testid="wholesale-price"]', '[data-testid="retail-price"]',
@@ -1667,7 +1667,7 @@ function scrapeFaire() {
     if (r.price) r.price = ensureCurrency(r.price, sym);
   }
 
-  // ── Price: Strategy 3 — JSON-LD ───────────────────────────
+  // â”€â”€ Price: Strategy 3 â€” JSON-LD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (!r.price) {
     for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
       try {
@@ -1682,7 +1682,7 @@ function scrapeFaire() {
             for (const of_ of arr) {
               const p = of_.price || of_.lowPrice;
               if (p !== undefined && p !== null && p !== '') {
-                const symMap = { USD:'$', GBP:'£', EUR:'€', JPY:'¥', INR:'₹', KRW:'₩', CAD:'CA$', AUD:'AU$' };
+                const symMap = { USD:'$', GBP:'Â£', EUR:'â‚¬', JPY:'Â¥', INR:'â‚¹', KRW:'â‚©', CAD:'CA$', AUD:'AU$' };
                 const cur = of_.priceCurrency || '';
                 const cs = symMap[cur.toUpperCase()] || sym;
                 r.price = `${cs}${p}`;
@@ -1698,7 +1698,7 @@ function scrapeFaire() {
     }
   }
 
-  // ── Images: Fallback DOM scan ──────────────────────────────
+  // â”€â”€ Images: Fallback DOM scan â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (r.images.length === 0) {
     const galleryScope = document.querySelector(
       '[data-testid*="product-image"], [class*="ProductImages"], ' +
@@ -1726,7 +1726,7 @@ function scrapeAlibaba() {
   if (t) r.title = t.innerText.trim();
   const pe = document.querySelector('.price, [class*="price-info"], [class*="product-price"], [class*="ma-spec-price"]');
   if (pe) {
-    const nums = (pe.innerText || '').match(/[$£€]?\s*\d{1,3}(?:[,.\s]\d{3})*(?:\.\d{1,2})?/g);
+    const nums = (pe.innerText || '').match(/[$Â£â‚¬]?\s*\d{1,3}(?:[,.\s]\d{3})*(?:\.\d{1,2})?/g);
     if (nums?.length >= 2) r.price = `${nums[0].trim()} - ${nums[1].trim()}`;
     else if (nums?.length === 1) r.price = nums[0].trim();
   }
@@ -1770,7 +1770,7 @@ async function scrapeTemu() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
   const sym = detectPageCurrencySymbol() || '$';
 
-  // ── Title ──────────────────────────────────────────────────
+  // â”€â”€ Title â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const titleEl = document.querySelector(
     '[class*="goods-name"], [class*="GoodsName"], [class*="ProductTitle"], ' +
     '[class*="product-title"], [class*="detail-title"], ' +
@@ -1778,19 +1778,19 @@ async function scrapeTemu() {
   );
   if (titleEl) r.title = titleEl.innerText.trim();
 
-  // ── Helper: upgrade CDN thumbnail URL to full-resolution origin ──
+  // â”€â”€ Helper: upgrade CDN thumbnail URL to full-resolution origin â”€â”€
   // Temu CDNs use suffixes like /thumbnail/200x200 or ?x-oss-process=image/resize,w_200
   // Replacing these gives the full-size product image instead of a preview.
   const temuOriginUrl = (u) => {
     if (!u || typeof u !== 'string') return u;
     return u
-      .replace(/\/thumbnail\/\d+x\d+/gi, '/origin')           // /thumbnail/200x200 → /origin
+      .replace(/\/thumbnail\/\d+x\d+/gi, '/origin')           // /thumbnail/200x200 â†’ /origin
       .replace(/\?x-oss-process=image\/resize[^&"]*/gi, '')   // strip Aliyun resize param
       .replace(/[?&]image_resize=\d+/gi, '')                   // strip ?image_resize=300
       .replace(/\?$/, '');                                     // clean trailing ?
   };
 
-  // ── Price + Images + Videos: Strategy 1 — window.__init_data__ ──
+  // â”€â”€ Price + Images + Videos: Strategy 1 â€” window.__init_data__ â”€â”€
   // Content scripts run in an isolated world; __init_data__ is a page-world global.
   // We inject a <script> to postMessage it back to the content script.
   try {
@@ -1814,7 +1814,7 @@ async function scrapeTemu() {
     });
 
     if (temuData) {
-      // FIX A1: Walk the FULL tree — never return early.
+      // FIX A1: Walk the FULL tree â€” never return early.
       // Images are collected on every node. Price is captured on first match.
       // Videos are also collected alongside images.
       const priceKeys = ['sale_price', 'salePrice', 'price', 'promotion_price',
@@ -1831,7 +1831,7 @@ async function scrapeTemu() {
       function walkTemuInitData(obj, depth) {
         if (!obj || typeof obj !== 'object' || depth > 18) return;
 
-        // ── Collect images ───────────────────────────────────
+        // â”€â”€ Collect images â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         for (const k of imgKeys) {
           if (k in obj && typeof obj[k] === 'string' && obj[k]) {
             const clean = temuOriginUrl(obj[k]);
@@ -1842,7 +1842,7 @@ async function scrapeTemu() {
           }
         }
 
-        // ── Collect videos ───────────────────────────────────
+        // â”€â”€ Collect videos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         for (const k of vidKeys) {
           if (k in obj && typeof obj[k] === 'string' && obj[k]) {
             const v = obj[k].replace(/\\\//g, '/');
@@ -1853,7 +1853,7 @@ async function scrapeTemu() {
           }
         }
 
-        // ── Capture price (first found, non-returning) ───────
+        // â”€â”€ Capture price (first found, non-returning) â”€â”€â”€â”€â”€â”€â”€
         if (!r.price) {
           for (const k of priceKeys) {
             if (k in obj) {
@@ -1870,7 +1870,7 @@ async function scrapeTemu() {
           }
         }
 
-        // ── Recurse into children (always, no early exit) ────
+        // â”€â”€ Recurse into children (always, no early exit) â”€â”€â”€â”€
         if (Array.isArray(obj)) {
           obj.forEach(v => { if (v && typeof v === 'object') walkTemuInitData(v, depth + 1); });
         } else {
@@ -1882,10 +1882,10 @@ async function scrapeTemu() {
     }
   } catch (_) {}
 
-  // ── Price: Strategy 2 — DOM selectors (specific → generic) ────────────
+  // â”€â”€ Price: Strategy 2 â€” DOM selectors (specific â†’ generic) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (!r.price) {
     r.price = priceFromSelectors([
-      // Temu uses CSS modules — look for price-like classes avoiding strikethrough
+      // Temu uses CSS modules â€” look for price-like classes avoiding strikethrough
       '[data-testid="price"]', '[data-testid="selling-price"]',
       '[data-testid*="current-price"]', '[data-testid*="sale-price"]',
       '[class*="price-sale"]', '[class*="priceSale"]',
@@ -1902,7 +1902,7 @@ async function scrapeTemu() {
     if (r.price) r.price = ensureCurrency(r.price, sym);
   }
 
-  // ── Price: Strategy 3 — inline script regex (multiple patterns) ───────
+  // â”€â”€ Price: Strategy 3 â€” inline script regex (multiple patterns) â”€â”€â”€â”€â”€â”€â”€
   if (!r.price) {
     for (const s of document.querySelectorAll('script:not([src])')) {
       const t = s.textContent || '';
@@ -1930,7 +1930,7 @@ async function scrapeTemu() {
     }
   }
 
-  // ── Images: Strategy 2 — inline scripts (fallback when __init_data__ had no images) ──
+  // â”€â”€ Images: Strategy 2 â€” inline scripts (fallback when __init_data__ had no images) â”€â”€
   // FIX A2: apply temuOriginUrl() so CDN thumbnail URLs become full-resolution
   if (r.images.length === 0) {
     const scriptTexts = [];
@@ -1961,7 +1961,7 @@ async function scrapeTemu() {
     }
   }
 
-  // ── Images: Strategy 3 — application/json scripts ──
+  // â”€â”€ Images: Strategy 3 â€” application/json scripts â”€â”€
   // FIX A2: apply temuOriginUrl() here too
   if (r.images.length === 0) {
     document.querySelectorAll('script[type="application/json"]').forEach(s => {
@@ -1982,7 +1982,7 @@ async function scrapeTemu() {
     });
   }
 
-  // ── Images: Strategy 4 — DOM gallery scan ──
+  // â”€â”€ Images: Strategy 4 â€” DOM gallery scan â”€â”€
   // FIX A2: temuOriginUrl() already applied here (was the only working strategy before)
   if (r.images.length === 0) {
     const galleryScope = document.querySelector(
@@ -2000,7 +2000,7 @@ async function scrapeTemu() {
     });
   }
 
-  // ── Videos: Strategy 2 — inline script regex (A3 fallback) ──────────
+  // â”€â”€ Videos: Strategy 2 â€” inline script regex (A3 fallback) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (r.videos.length === 0) {
     for (const s of document.querySelectorAll('script:not([src])')) {
       const t = s.textContent || '';
@@ -2069,7 +2069,7 @@ function scrapeShopify() {
   return r;
 }
 
-// ── ISSUE 3 FIX: Flipkart scraper ───────────────────────────
+// â”€â”€ ISSUE 3 FIX: Flipkart scraper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function scrapeFlipkart() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
   const t = document.querySelector('span[class*="B_NuCI"], h1, [class*="product-title"]');
@@ -2077,7 +2077,7 @@ function scrapeFlipkart() {
   r.price = priceFromSelectors([
     '._30jeq3._16Jk6d', '._30jeq3', '[class*="finalPrice"]', '[class*="price"]'
   ]);
-  if (r.price) r.price = ensureCurrency(r.price, '₹');
+  if (r.price) r.price = ensureCurrency(r.price, 'â‚¹');
 
   const galleryScope = document.querySelector('._3kidJX, [class*="imgWrapper"], [class*="ImageGallery"]') || findProductGalleryContainer() || document;
   collectImagesBySelector('._2r_T1I img, ._3kidJX img, [class*="productImage"] img, [class*="imgWrapper"] img', galleryScope)
@@ -2085,7 +2085,7 @@ function scrapeFlipkart() {
   return r;
 }
 
-// ── ISSUE 3 FIX: Noon scraper ───────────────────────────────
+// â”€â”€ ISSUE 3 FIX: Noon scraper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function scrapeNoon() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
   const t = document.querySelector('h1, [class*="productTitle"], [class*="product-title"]');
@@ -2098,7 +2098,7 @@ function scrapeNoon() {
   return r;
 }
 
-// ── ISSUE 3 FIX: Etsy scraper ───────────────────────────────
+// â”€â”€ ISSUE 3 FIX: Etsy scraper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function scrapeEtsy() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
   const t = document.querySelector('h1, [class*="listing-page-title"], [data-buy-box-listing-title]');
@@ -2115,7 +2115,7 @@ function scrapeEtsy() {
   return r;
 }
 
-// ── ISSUE 3 FIX: Shein scraper ──────────────────────────────
+// â”€â”€ ISSUE 3 FIX: Shein scraper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function scrapeShein() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
   const t = document.querySelector('h1, [class*="goods-name"], [class*="product-intro__head-name"]');
@@ -2152,7 +2152,7 @@ function scrapeYouTube() {
   return r;
 }
 
-// ── Golf Retail scraper (Shopify based) ────────────────────────
+// â”€â”€ Golf Retail scraper (Shopify based) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function scrapeGolfRetail() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
   const sym = detectPageCurrencySymbol() || '$';
@@ -2184,7 +2184,7 @@ function scrapeGolfRetail() {
   return r;
 }
 
-// ── World Wide Golf Balls / Worldwide Golf Shops scraper ─────
+// â”€â”€ World Wide Golf Balls / Worldwide Golf Shops scraper â”€â”€â”€â”€â”€
 // Both worldwidegolfballs.com and worldwidegolfshops.com
 function scrapeWorldwideGolfBalls() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
@@ -2235,7 +2235,7 @@ function scrapeWorldwideGolfBalls() {
   return r;
 }
 
-// ── Upgrade 1: Target, Costco, Home Depot, Best Buy ────────────────
+// â”€â”€ Upgrade 1: Target, Costco, Home Depot, Best Buy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function scrapeTarget() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
   const sym = detectPageCurrencySymbol() || '$';
@@ -2295,7 +2295,7 @@ function scrapeBestBuy() {
   return r;
 }
 
-// ── ISSUE 3 FIX: Universal generic scraper ───────────────────
+// â”€â”€ ISSUE 3 FIX: Universal generic scraper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Works on any e-commerce site with JSON-LD or structured markup.
 function scrapeGeneric() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
@@ -2362,7 +2362,7 @@ function scrapeGeneric() {
   return r;
 }
 
-// ── Enhancement (Merge) ──────────────────────────────────────
+// â”€â”€ Enhancement (Merge) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function mergeUnique(target, items, keyFn) {
   const seen = new Set(target.map(keyFn));
   for (const it of items) {
@@ -2401,11 +2401,11 @@ async function enhanceWithGlobals(data) {
   mergeUnique(data.videos, harvested.videos, x => (YT_REGEX.test(x) ? ytWatch(x) : x));
 
   // ISSUE 1 FIX: Only use harvested price if it has a currency symbol
-  if (!data.price && harvested.price && /[$£€¥₹₩]/.test(harvested.price)) {
+  if (!data.price && harvested.price && /[$Â£â‚¬Â¥â‚¹â‚©]/.test(harvested.price)) {
     data.price = harvested.price;
   }
 
-  // OG / twitter image fallbacks — use mergeUnique so they don't duplicate
+  // OG / twitter image fallbacks â€” use mergeUnique so they don't duplicate
   // images already collected from the gallery or JSON harvest.
   const ogImages = [];
   document.querySelectorAll('meta[property="og:image"], meta[property="og:image:secure_url"], meta[name="twitter:image"]')
@@ -2424,7 +2424,7 @@ async function enhanceWithGlobals(data) {
   return data;
 }
 
-// ── ISSUE 3 FIX: Dispatcher — expanded platform detection ────
+// â”€â”€ ISSUE 3 FIX: Dispatcher â€” expanded platform detection â”€â”€â”€â”€
 function pickPlatform() {
   const h = host();
   if (h.includes('amazon.'))                                  return scrapeAmazon;
@@ -2455,7 +2455,7 @@ function pickPlatform() {
   )) return scrapeShopify;
   // Detect BigCommerce
   if (document.querySelector('[data-product-option-change], [class*="ProductView"], .productView')) return scrapeShopify;
-  // Fallback: check JSON-LD for Product type — use generic with full power
+  // Fallback: check JSON-LD for Product type â€” use generic with full power
   return scrapeGeneric;
 }
 
@@ -2489,8 +2489,8 @@ async function scrapePageData() {
   const candidateTitle = (data.title || docTitle || '').trim();
   data.title = BAD_TITLE.test(candidateTitle) ? '' : candidateTitle;
 
-  // ISSUE 1 FIX: Ensure price has a currency symbol — detect from page
-  if (data.price && !/[$£€¥₹₩]/.test(data.price) && !/^(USD|CAD|AUD|GBP|EUR|PKR|INR)/i.test(data.price)) {
+  // ISSUE 1 FIX: Ensure price has a currency symbol â€” detect from page
+  if (data.price && !/[$Â£â‚¬Â¥â‚¹â‚©]/.test(data.price) && !/^(USD|CAD|AUD|GBP|EUR|PKR|INR)/i.test(data.price)) {
     const sym = detectPageCurrencySymbol();
     data.price = `${sym}${data.price}`;
   }
@@ -2503,231 +2503,8 @@ async function scrapePageData() {
   return data;
 }
 
-// ── Product-page image card ─────────────────────────────────
-// A lightweight page-level action card keeps the most common image workflow
-// next to the product. It reuses scrapePageData and the local downloads API.
-let _zhunterPageCard = null;
 
-function isLikelyProductPage() {
-  try {
-    const path = location.pathname.toLowerCase();
-    const productPath = /\/(dp|gp\/product|ip|itm|listing|products?|product|goods|item|p)\//i.test(path);
-    const productDom = !!document.querySelector(
-      '#productTitle, [data-asin], [data-product-id], [itemtype*="Product"], ' +
-      '[data-testid*="product"], [class*="product-title"], [class*="ProductTitle"], ' +
-      'meta[property="og:type"][content*="product"], form[action*="/cart/add"]'
-    );
-    const productJson = [...document.querySelectorAll('script[type="application/ld+json"]')]
-      .some(s => /"@type"\s*:\s*("Product"|\[.*Product)/i.test(s.textContent || ''));
-    return productPath || productDom || productJson;
-  } catch (_) { return false; }
-}
-
-async function scrapePageDataWithRetries() {
-  const waits = [0, 700, 1600, 3000];
-  let latest = null;
-  for (const wait of waits) {
-    if (wait) await new Promise(resolve => setTimeout(resolve, wait));
-    try {
-      latest = await scrapePageData();
-      if ((latest?.images?.length || 0) >= 2 || wait === waits[waits.length - 1]) return latest || {};
-    } catch (_) {}
-  }
-  return latest || {};
-}
-
-function initProductImageCard() {
-  if (_zhunterPageCard || !document.body || !isLikelyProductPage()) return;
-  _zhunterPageCard = document.createElement('div');
-  _zhunterPageCard.id = 'zhunter-product-image-card';
-  const shadow = _zhunterPageCard.attachShadow({ mode: 'open' });
-  shadow.innerHTML = `
-    <style>
-      :host{all:initial;position:fixed;right:14px;bottom:14px;z-index:2147483647;max-width:calc(100vw - 20px);font-family:Arial,sans-serif;color:#e6f7ff}
-      .card{width:248px;background:linear-gradient(145deg,#0b1a2e,#07111f);border:1px solid rgba(34,211,238,.48);border-radius:11px;box-shadow:0 10px 28px rgba(0,0,0,.38),0 0 0 1px rgba(8,145,178,.14);overflow:hidden;transition:width .18s ease,box-shadow .18s ease,transform .18s ease;animation:zh-enter .26s ease-out both}
-      .card.busy{box-shadow:0 12px 34px rgba(0,0,0,.44),0 0 18px rgba(34,211,238,.18)}
-      .card.success{border-color:rgba(110,231,183,.65)}
-      .card.error{border-color:rgba(251,113,133,.72)}
-      @keyframes zh-enter{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
-      @keyframes zh-pulse{0%,100%{opacity:.55}50%{opacity:1}}
-      @keyframes zh-progress{from{transform:translateX(-100%)}to{transform:translateX(260%)}}
-      @media (prefers-reduced-motion:reduce){.card{animation:none;transition:none}.progress.indeterminate span{animation:none}}
-      .progress{display:none;height:3px;background:rgba(148,163,184,.15);overflow:hidden}.progress.visible{display:block}.progress span{display:block;height:100%;width:0;background:#22d3ee;transition:width .2s ease}.progress.indeterminate span{width:38%;animation:zh-progress 1.1s ease-in-out infinite}
-      .head{display:flex;align-items:center;gap:7px;padding:8px 9px;border-bottom:1px solid rgba(148,163,184,.14);min-height:28px;box-sizing:border-box;cursor:grab;user-select:none}.head.dragging{cursor:grabbing}
-      .brand{display:flex;align-items:center;gap:6px;min-width:0;flex:1;font-size:11px;font-weight:800;letter-spacing:.1px;white-space:nowrap}.brand>span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dot{width:7px;height:7px;flex:none;border-radius:50%;background:#22d3ee;box-shadow:0 0 8px #22d3ee}
-      .mini{display:grid;place-items:center;flex:none;width:20px;height:20px;border:1px solid rgba(148,163,184,.25);border-radius:50%;background:rgba(148,163,184,.08);color:#c9e5ef;cursor:pointer;font-size:13px;line-height:1;padding:0}.mini:hover{border-color:#22d3ee;background:rgba(34,211,238,.14);color:#fff}
-      .body{padding:9px}.select-row{display:flex;align-items:center;gap:7px;color:#a8c3d0;font-size:9px}.select-row label{display:flex;align-items:center;gap:3px;cursor:pointer}.select-row input{accent-color:#22d3ee}.select-clear{border:0;background:transparent;color:#8fb1c0;font-size:9px;cursor:pointer;padding:0}.select-clear:hover{color:#fff}.thumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:7px}.thumb{position:relative;display:block;height:48px;border:1px solid rgba(148,163,184,.22);border-radius:5px;overflow:hidden;background:#0b1b2e;cursor:pointer}.thumb img{width:100%;height:100%;object-fit:cover;display:block}.thumb input{position:absolute;left:1px;top:1px;z-index:1;accent-color:#22d3ee;margin:0}.thumb:not(:has(input:checked)){opacity:.40}.actions{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:8px}.btn{border:1px solid rgba(148,163,184,.22);border-radius:7px;padding:7px 5px;background:#10243c;color:#d9f6ff;font-size:9px;font-weight:700;cursor:pointer}.btn.primary{background:#0786a7;border-color:#22d3ee;color:#fff}.btn:hover{filter:brightness(1.15)}.btn:disabled{opacity:.5;cursor:wait}.status{min-height:12px;margin-top:7px;color:#91b0c1;font-size:9px;line-height:1.3;transition:color .16s ease}.status.ok{color:#6ee7b7}.status.warn{color:#fcd34d}.status.err{color:#fb7185}.status.busy{animation:zh-pulse 1.2s ease-in-out infinite}.retry{display:none;width:100%;margin-top:6px;padding:6px;border:1px solid rgba(251,191,36,.34);border-radius:7px;background:rgba(146,64,14,.22);color:#fde68a;font-size:9px;font-weight:700;cursor:pointer}.retry.visible{display:block}.retry:hover{background:rgba(146,64,14,.38)}.collapsed .body{display:none}.collapsed.card{width:178px}.collapsed .head{border-bottom:0;padding:7px 9px}.collapsed .brand>span:last-child{font-size:10px}.collapsed .mini{width:19px;height:19px}
-    </style>
-    <div class="card"><div class="head"><div class="brand"><span class="dot"></span><span>ZHunter Images</span></div><button class="mini" id="min" title="Minimize">−</button></div><div class="body"><div class="select-row"><label><input id="selectAll" type="checkbox" checked> Select all</label><button class="select-clear" id="clearSelection" type="button">Clear</button></div><div class="thumbs" id="thumbs"></div><div class="actions"><button class="btn primary" id="download" disabled>Download Selected</button><button class="btn" id="add">Add to Queue</button></div><div class="progress" id="progress"><span id="progressBar"></span></div><div class="status" id="status" role="status" aria-live="polite">Scanning images…</div><button class="retry" id="retry" type="button">Retry</button></div></div>`;
-  document.body.appendChild(_zhunterPageCard);
-
-  const root = shadow;
-  const card = root.querySelector('.card');
-  const statusEl = root.querySelector('#status');
-  const downloadBtn = root.querySelector('#download');
-  const thumbsEl = root.querySelector('#thumbs');
-  const selectAllEl = root.querySelector('#selectAll');
-  const progressEl = root.querySelector('#progress');
-  const progressBarEl = root.querySelector('#progressBar');
-  const retryBtn = root.querySelector('#retry');
-  const addBtn = root.querySelector('#add');
-  let pageData = null;
-  let failedDownloadUrls = [];
-  let scanToken = 0;
-  const setState = state => { card.classList.remove('busy', 'success', 'error'); if (state) card.classList.add(state); };
-  const status = (text, type = '') => { statusEl.textContent = text; statusEl.className = 'status' + (type ? ' ' + type : ''); };
-  const setProgress = (value, indeterminate = false) => {
-    progressEl.classList.toggle('visible', value !== null || indeterminate);
-    progressEl.classList.toggle('indeterminate', indeterminate);
-    progressBarEl.style.width = indeterminate ? '38%' : `${Math.max(0, Math.min(100, value || 0))}%`;
-  };
-  const showRetry = (visible, label = 'Retry') => { retryBtn.textContent = label; retryBtn.classList.toggle('visible', visible); };
-  const selectedUrls = () => [...root.querySelectorAll('.thumb input:checked')].map(input => pageData?.images?.[Number(input.dataset.index)]).filter(Boolean);
-  const refreshSelection = () => {
-    const count = selectedUrls().length;
-    selectAllEl.checked = !!pageData?.images?.length && count === pageData.images.length;
-    downloadBtn.disabled = count === 0;
-  };
-  const renderThumbs = images => {
-    thumbsEl.textContent = '';
-    images.slice(0, 7).forEach((url, index) => {
-      const label = document.createElement('label');
-      label.className = 'thumb';
-      const input = document.createElement('input');
-      input.type = 'checkbox'; input.checked = true; input.dataset.index = String(index);
-      input.addEventListener('change', refreshSelection);
-      const img = document.createElement('img');
-      img.src = url; img.alt = `Product image ${index + 1}`; img.loading = 'lazy';
-      label.append(input, img); thumbsEl.appendChild(label);
-    });
-    refreshSelection();
-  };
-
-  const scanPage = async () => {
-    const token = ++scanToken;
-    failedDownloadUrls = [];
-    showRetry(false);
-    setState('busy');
-    setProgress(null, true);
-    status('Scanning images…', 'busy');
-    downloadBtn.disabled = true;
-    addBtn.disabled = true;
-    try {
-      const data = await scrapePageDataWithRetries();
-      if (token !== scanToken) return;
-      pageData = data || {};
-      pageData.images = Array.isArray(pageData.images) ? pageData.images.slice(0, 7) : [];
-      renderThumbs(pageData.images);
-      setProgress(100);
-      if (pageData.images.length) {
-        setState('success');
-        status('Choose images, then download.', 'ok');
-        showRetry(false);
-      } else {
-        setState('error');
-        status('No product images found. The gallery may still be loading.', 'warn');
-        showRetry(true, 'Retry image scan');
-      }
-    } catch (_) {
-      setState('error');
-      setProgress(0);
-      status('Image scan failed. You can retry without leaving the page.', 'err');
-      showRetry(true, 'Retry image scan');
-    } finally {
-      if (token === scanToken) addBtn.disabled = false;
-    }
-  };
-
-  const downloadImages = urls => {
-    const uniqueUrls = [...new Set((urls || []).filter(Boolean))].slice(0, 7);
-    if (!uniqueUrls.length) return status('Select at least one image first.', 'warn');
-    failedDownloadUrls = [];
-    setState('busy');
-    setProgress(null, true);
-    showRetry(false);
-    downloadBtn.disabled = true;
-    addBtn.disabled = true;
-    status(`Downloading ${uniqueUrls.length} image${uniqueUrls.length === 1 ? '' : 's'}…`, 'busy');
-    chrome.runtime.sendMessage({ action: 'DOWNLOAD_PAGE_IMAGES', urls: uniqueUrls, title: pageData?.title }, result => {
-      const started = Number(result?.started || 0);
-      const requested = Number(result?.requested || uniqueUrls.length);
-      const failed = Number(result?.failed || Math.max(0, requested - started));
-      failedDownloadUrls = Array.isArray(result?.failedUrls) ? result.failedUrls : [];
-      setProgress(requested ? Math.round((started / requested) * 100) : 0);
-      addBtn.disabled = false;
-      refreshSelection();
-      if (result?.success && failed === 0) {
-        setState('success');
-        status(`${started} image${started === 1 ? '' : 's'} downloaded successfully.`, 'ok');
-        showRetry(false);
-      } else if (started > 0) {
-        setState('error');
-        status(`${started}/${requested} downloaded; ${failed} failed.`, 'warn');
-        showRetry(failedDownloadUrls.length > 0, 'Retry failed downloads');
-      } else {
-        setState('error');
-        status('Download failed. Check permissions or retry.', 'err');
-        showRetry(true, 'Retry download');
-      }
-    });
-  };
-
-  const headerEl = root.querySelector('.head');
-  root.querySelector('#min').addEventListener('click', () => {
-    card.classList.toggle('collapsed');
-    root.querySelector('#min').textContent = card.classList.contains('collapsed') ? '+' : '−';
-    root.querySelector('#min').title = card.classList.contains('collapsed') ? 'Expand ZHunter Images' : 'Minimize ZHunter Images';
-  });
-  let dragState = null;
-  headerEl.addEventListener('pointerdown', event => {
-    if (event.target.closest('#min')) return;
-    const rect = _zhunterPageCard.getBoundingClientRect();
-    dragState = { dx: event.clientX - rect.left, dy: event.clientY - rect.top };
-    headerEl.classList.add('dragging');
-    headerEl.setPointerCapture?.(event.pointerId);
-  });
-  headerEl.addEventListener('pointermove', event => {
-    if (!dragState) return;
-    const rect = _zhunterPageCard.getBoundingClientRect();
-    const left = Math.max(8, Math.min(window.innerWidth - rect.width - 8, event.clientX - dragState.dx));
-    const top = Math.max(8, Math.min(window.innerHeight - rect.height - 8, event.clientY - dragState.dy));
-    _zhunterPageCard.style.left = `${left}px`;
-    _zhunterPageCard.style.top = `${top}px`;
-    _zhunterPageCard.style.right = 'auto';
-    _zhunterPageCard.style.bottom = 'auto';
-  });
-  const finishDrag = () => { dragState = null; headerEl.classList.remove('dragging'); };
-  headerEl.addEventListener('pointerup', finishDrag);
-  headerEl.addEventListener('pointercancel', finishDrag);
-  selectAllEl.addEventListener('change', () => {
-    root.querySelectorAll('.thumb input').forEach(input => { input.checked = selectAllEl.checked; });
-    refreshSelection();
-  });
-  root.querySelector('#clearSelection').addEventListener('click', () => {
-    selectAllEl.checked = false;
-    root.querySelectorAll('.thumb input').forEach(input => { input.checked = false; });
-    refreshSelection();
-  });
-  root.querySelector('#add').addEventListener('click', () => {
-    if (!pageData) return status('Still scanning the product…', 'warn');
-    chrome.runtime.sendMessage({ action: 'ADD_PRODUCT_QUEUE', items: [{ url: location.href, title: pageData.title, price: pageData.price, source: 'page_card' }] }, result => {
-      if (result?.addedCount) status('Added to Product Queue.', 'ok');
-      else status('Already saved or unsupported page.', 'warn');
-    });
-  });
-  downloadBtn.addEventListener('click', () => downloadImages(selectedUrls()));
-  retryBtn.addEventListener('click', () => {
-    if (failedDownloadUrls.length) downloadImages(failedDownloadUrls);
-    else scanPage();
-  });
-
-  scanPage();
-}
-
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(initProductImageCard, 900), { once: true });
-else setTimeout(initProductImageCard, 900);
-
-// ── Message Listener ────────────────────────────────────────
+// â”€â”€ Message Listener â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   try {
     if (message?.action === 'SCRAPE_PAGE') {
@@ -2778,7 +2555,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return true;
 });
 
-// ── In-Page ZHunter Floating Button ──────────────────────────
+// â”€â”€ In-Page ZHunter Floating Button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 (function() {
   const BG_PLATFORM_KEYS = [
     'walmart.com', 'amazon.', 'samsclub.com', 'faire.com', 'aliexpress.',
@@ -2796,7 +2573,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const isProductDomain = BG_PLATFORM_KEYS.some(k => currentHost.includes(k));
   if (!isProductDomain) return;
 
-  // Step 2: Must be an actual product page — NOT search/category/home
+  // Step 2: Must be an actual product page â€” NOT search/category/home
   const PRODUCT_URL_PATTERNS = [
     /\/ip\//,           // Walmart: /ip/product-name/12345
     /\/dp\//,           // Amazon: /dp/ASIN
@@ -2946,11 +2723,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     const btn = document.createElement('button');
     btn.className = 'zhunter-btn';
-    btn.innerHTML = '<span class="zhunter-icon">⚡</span><span>Add to Queue</span>';
+    btn.innerHTML = '<span class="zhunter-icon">âš¡</span><span>Add to Queue</span>';
 
     const toast = document.createElement('div');
     toast.className = 'zhunter-toast';
-    toast.innerHTML = '<span>🚀</span><span>Product added to ZHunter Queue!</span>';
+    toast.innerHTML = '<span>ðŸš€</span><span>Product added to ZHunter Queue!</span>';
 
     wrap.appendChild(btn);
     shadow.appendChild(wrap);
@@ -2978,7 +2755,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     function markAdded() {
       btn.classList.add('added');
-      btn.innerHTML = '<span class="zhunter-icon">✓</span><span>Queued</span>';
+      btn.innerHTML = '<span class="zhunter-icon">âœ“</span><span>Queued</span>';
     }
 
     function showToast() {
@@ -3037,7 +2814,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 })();
 
-// ── ZHunter In-Page Image Panel ──────────────────────────────
+// â”€â”€ ZHunter In-Page Image Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 (function () {
   const PANEL_ID = 'zhunter-img-panel-root';
   const IMG_PLATFORM_KEYS = [
@@ -3067,7 +2844,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (NON_PRODUCT_PATTERNS.some(p => p.test(path) || p.test(href))) return;
   if (!PRODUCT_PATH_PATTERNS.some(p => p.test(path) || p.test(href))) return;
 
-  // ── Image Collector ──────────────────────────────────────────
+  // â”€â”€ Image Collector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function collectPageImages() {
     const seen = new Set();
     const imgs = [];
@@ -3133,7 +2910,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return imgs.slice(0, 20);
   }
 
-  // ── Download helper ──────────────────────────────────────────
+  // â”€â”€ Download helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function downloadViaBackground(url, filename) {
     chrome.runtime.sendMessage({ action: 'FETCH_BASE64', url }, res => {
       if (chrome.runtime.lastError || !res?.base64) {
@@ -3156,7 +2933,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     });
   }
 
-  // ── Init Panel ───────────────────────────────────────────────
+  // â”€â”€ Init Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function initImagePanel() {
     if (document.getElementById(PANEL_ID)) return;
 
@@ -3246,7 +3023,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .img-wrap.selected .img-check {
         background: #00e5ff; border-color: #00e5ff;
       }
-      .img-wrap.selected .img-check::after { content: '✓'; color: #000; font-size: 10px; font-weight: 900; }
+      .img-wrap.selected .img-check::after { content: 'âœ“'; color: #000; font-size: 10px; font-weight: 900; }
       .img-idx {
         position: absolute; bottom: 3px; right: 4px;
         font-size: 9px; font-weight: 700; color: rgba(255,255,255,0.55);
@@ -3286,48 +3063,48 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     panel.className = 'panel';
     shadow.appendChild(panel);
 
-    // ── Header
+    // â”€â”€ Header
     const header = document.createElement('div');
     header.className = 'header';
     header.innerHTML = `
       <div class="header-left">
-        <div class="header-icon">🖼</div>
+        <div class="header-icon">ðŸ–¼</div>
         <span class="header-title">ZHunter Images</span>
         <span class="header-count" id="zh-img-count">0</span>
       </div>
-      <button class="toggle-btn" id="zh-toggle-btn" title="Minimize">◀</button>
+      <button class="toggle-btn" id="zh-toggle-btn" title="Minimize">â—€</button>
     `;
     panel.appendChild(header);
 
-    // ── Body
+    // â”€â”€ Body
     const body = document.createElement('div');
     body.className = 'body';
     body.id = 'zh-img-body';
-    body.innerHTML = `<div class="empty">🔍 Scanning images…</div>`;
+    body.innerHTML = `<div class="empty">ðŸ” Scanning imagesâ€¦</div>`;
     panel.appendChild(body);
 
-    // ── Footer
+    // â”€â”€ Footer
     const footer = document.createElement('div');
     footer.className = 'footer';
     footer.innerHTML = `
       <button class="btn-sm btn-ghost" id="zh-sel-all">All</button>
       <button class="btn-sm btn-ghost" id="zh-sel-none">None</button>
-      <button class="btn-sm btn-dl" id="zh-dl-btn" disabled>↓ Download</button>
+      <button class="btn-sm btn-dl" id="zh-dl-btn" disabled>â†“ Download</button>
     `;
     panel.appendChild(footer);
 
-    // ── Status bar
+    // â”€â”€ Status bar
     const statusBar = document.createElement('div');
     statusBar.className = 'status-bar';
     statusBar.id = 'zh-status';
     panel.appendChild(statusBar);
 
-    // ── State
+    // â”€â”€ State
     let images = [];
     let selected = new Set();
     let collapsed = false;
 
-    // ── Toggle collapse
+    // â”€â”€ Toggle collapse
     const toggleBtn = shadow.getElementById('zh-toggle-btn');
     const countEl   = shadow.getElementById('zh-img-count');
     const dlBtn     = shadow.getElementById('zh-dl-btn');
@@ -3337,15 +3114,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (e.target === toggleBtn) return;
       collapsed = !collapsed;
       panel.classList.toggle('collapsed', collapsed);
-      toggleBtn.textContent = collapsed ? '▶' : '◀';
+      toggleBtn.textContent = collapsed ? 'â–¶' : 'â—€';
     });
     toggleBtn.addEventListener('click', () => {
       collapsed = !collapsed;
       panel.classList.toggle('collapsed', collapsed);
-      toggleBtn.textContent = collapsed ? '▶' : '◀';
+      toggleBtn.textContent = collapsed ? 'â–¶' : 'â—€';
     });
 
-    // ── Render grid
+    // â”€â”€ Render grid
     function renderGrid() {
       const b = shadow.getElementById('zh-img-body');
       if (!images.length) {
@@ -3380,10 +3157,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     function updateDlBtn() {
       const n = selected.size;
       dlBtn.disabled = n === 0;
-      dlBtn.textContent = n > 0 ? `↓ Download ${n}` : '↓ Download';
+      dlBtn.textContent = n > 0 ? `â†“ Download ${n}` : 'â†“ Download';
     }
 
-    // ── Select All / None
+    // â”€â”€ Select All / None
     shadow.getElementById('zh-sel-all').addEventListener('click', () => {
       images.forEach((_, i) => selected.add(i));
       renderGrid();
@@ -3393,7 +3170,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       renderGrid();
     });
 
-    // ── Download Selected
+    // â”€â”€ Download Selected
     dlBtn.addEventListener('click', async () => {
       if (!selected.size) return;
       dlBtn.disabled = true;
@@ -3401,7 +3178,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       let done = 0;
 
       status.className = 'status-bar';
-      status.textContent = `Downloading 0 / ${toDownload.length}…`;
+      status.textContent = `Downloading 0 / ${toDownload.length}â€¦`;
 
       const productSlug = document.title.replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 30);
 
@@ -3412,18 +3189,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         try {
           downloadViaBackground(url, filename);
           done++;
-          status.textContent = `Downloading ${done} / ${toDownload.length}…`;
+          status.textContent = `Downloading ${done} / ${toDownload.length}â€¦`;
           await new Promise(r => setTimeout(r, 400)); // stagger downloads
         } catch (_) {}
       }
 
       status.className = 'status-bar ok';
-      status.textContent = `✓ ${done} image${done !== 1 ? 's' : ''} downloaded!`;
+      status.textContent = `âœ“ ${done} image${done !== 1 ? 's' : ''} downloaded!`;
       dlBtn.disabled = false;
       setTimeout(() => { status.textContent = ''; status.className = 'status-bar'; }, 4000);
     });
 
-    // ── Load images (with delay for SPAs)
+    // â”€â”€ Load images (with delay for SPAs)
     setTimeout(() => {
       images = collectPageImages();
       selected = new Set(images.map((_, i) => i)); // select all by default
@@ -3439,7 +3216,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }, 1200);
   }
 
-  // ── Kick off
+  // â”€â”€ Kick off
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initImagePanel);
   } else {
