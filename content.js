@@ -1,19 +1,19 @@
 ﻿// ============================================================
-// ZHunter PRO v7.9.15 â€” Content Script
+// ZHunter PRO v7.9.15 Ã¢â‚¬â€ Content Script
 // ============================================================
 // Fixes vs 7.6.0:
-//   â€¢ Issue 1: Correct price extraction â€” reads full price string
+//   Ã¢â‚¬Â¢ Issue 1: Correct price extraction Ã¢â‚¬â€ reads full price string
 //     (whole + fractional) directly from DOM; JSON harvest no longer
 //     picks up unrelated numeric price fields (uses currency-bearing
 //     string fields only when they originate from offer/price keys).
-//   â€¢ Issue 2: Stronger isBadImage() â€” blocks logos, platform chrome,
+//   Ã¢â‚¬Â¢ Issue 2: Stronger isBadImage() Ã¢â‚¬â€ blocks logos, platform chrome,
 //     UI sprites, tiny icons, header/footer/nav/banner images. DOM-
 //     position-aware filtering rejects images outside the main product
 //     gallery container.
-//   â€¢ Issue 3: Universal e-commerce scraper covers Flipkart, Noon,
+//   Ã¢â‚¬Â¢ Issue 3: Universal e-commerce scraper covers Flipkart, Noon,
 //     WooCommerce, BigCommerce, and any site exposing schema.org/JSON-LD
-//     Product or Offer markup â€” no per-site hardcoding needed.
-//   â€¢ Issue 4: Gallery-scoped image collection â€” images are collected
+//     Product or Offer markup Ã¢â‚¬â€ no per-site hardcoding needed.
+//   Ã¢â‚¬Â¢ Issue 4: Gallery-scoped image collection Ã¢â‚¬â€ images are collected
 //     only from the main product display area (hero + thumbnails).
 //     Description sections, review carousels, upsell grids, footer
 //     banners are all excluded.
@@ -27,20 +27,20 @@ const IMG_CAP = 15;
 const VID_CAP = 12;
 
 // FIX: Cache the harvestInlineJson result per page load.
-// On complex pages (Next.js/Walmart/Amazon) the inline scripts can be 500 KBâ€“2 MB.
-// Re-parsing them on every SCRAPE_PAGE message caused 200â€“500 ms freezes.
+// On complex pages (Next.js/Walmart/Amazon) the inline scripts can be 500 KBÃ¢â‚¬â€œ2 MB.
+// Re-parsing them on every SCRAPE_PAGE message caused 200Ã¢â‚¬â€œ500 ms freezes.
 let _harvestCache = null;
 
-// â”€â”€ Basics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ Basics Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const absUrl = u => { try { return new URL(u, location.href).href; } catch (_) { return u || ''; } };
 const host   = () => { try { return location.hostname.toLowerCase().replace(/^www\./, ''); } catch (_) { return ''; } };
 
-// â”€â”€ Price Cleaner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ Price Cleaner Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // Strips discount noise and returns the FIRST standalone price token found.
 function cleanPriceText(raw) {
   if (!raw || typeof raw !== 'string') return '';
   let s = raw
-    .replace(/[-âˆ’]\s*\d{1,3}\s*%/g, '')
+    .replace(/[-Ã¢Ë†â€™]\s*\d{1,3}\s*%/g, '')
     .replace(/\d{1,3}\s*%\s*off/gi, '')
     .replace(/\(\s*\d{1,3}\s*%\s*\)/g, '')
     .replace(/save\s+\$?\d[\d.,]*/gi, '')
@@ -54,8 +54,8 @@ function cleanPriceText(raw) {
     .trim();
 
   const patterns = [
-    /[$Â£â‚¬Â¥â‚¹â‚©]\s*\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?/,
-    /\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?\s*[$Â£â‚¬Â¥â‚¹â‚©]/,
+    /[$Ã‚Â£Ã¢â€šÂ¬Ã‚Â¥Ã¢â€šÂ¹Ã¢â€šÂ©]\s*\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?/,
+    /\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?\s*[$Ã‚Â£Ã¢â€šÂ¬Ã‚Â¥Ã¢â€šÂ¹Ã¢â€šÂ©]/,
     /(?:USD|CAD|AUD|GBP|EUR|PKR|INR)\s*\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?/i,
     /\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?/
   ];
@@ -68,10 +68,10 @@ function cleanPriceText(raw) {
 
 function ensureCurrency(p, symbol) {
   if (!p) return '';
-  // Already has a currency symbol or code â€” return as-is
-  if (/^[$Â£â‚¬Â¥â‚¹â‚©]/.test(p)) return p;
+  // Already has a currency symbol or code Ã¢â‚¬â€ return as-is
+  if (/^[$Ã‚Â£Ã¢â€šÂ¬Ã‚Â¥Ã¢â€šÂ¹Ã¢â€šÂ©]/.test(p)) return p;
   if (/^(USD|CAD|AUD|GBP|EUR|PKR|INR)/i.test(p)) return p;
-  if (/[$Â£â‚¬Â¥â‚¹â‚©]$/.test(p)) return p;
+  if (/[$Ã‚Â£Ã¢â€šÂ¬Ã‚Â¥Ã¢â€šÂ¹Ã¢â€šÂ©]$/.test(p)) return p;
   // Use detected symbol from page, or fall back to $
   return `${symbol || '$'}${p}`;
 }
@@ -84,19 +84,19 @@ function detectPageCurrencySymbol() {
   );
   for (const el of priceEls) {
     const txt = el.textContent || '';
-    const m = txt.match(/[$Â£â‚¬Â¥â‚¹â‚©]/);
+    const m = txt.match(/[$Ã‚Â£Ã¢â€šÂ¬Ã‚Â¥Ã¢â€šÂ¹Ã¢â€šÂ©]/);
     if (m) return m[0];
   }
   // Fallback: look in meta tags
   const meta = document.querySelector('meta[property="product:price:currency"], meta[itemprop="priceCurrency"]');
   if (meta?.content) {
-    const map = { USD: '$', GBP: 'Â£', EUR: 'â‚¬', JPY: 'Â¥', INR: 'â‚¹', KRW: 'â‚©', CAD: 'CA$', AUD: 'AU$' };
+    const map = { USD: '$', GBP: 'Ã‚Â£', EUR: 'Ã¢â€šÂ¬', JPY: 'Ã‚Â¥', INR: 'Ã¢â€šÂ¹', KRW: 'Ã¢â€šÂ©', CAD: 'CA$', AUD: 'AU$' };
     return map[meta.content.toUpperCase()] || meta.content + ' ';
   }
   return '$';
 }
 
-// â”€â”€ Image quality / dedup helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ Image quality / dedup helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function normalizeImg(rawUrl) {
   try {
     const u = new URL(absUrl(rawUrl));
@@ -170,7 +170,7 @@ function canonImageKey(url) {
   } catch (_) { return String(url || '').toLowerCase(); }
 }
 
-// â”€â”€ ISSUE 2 & 4 FIX: Stronger image bad-image filter â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ ISSUE 2 & 4 FIX: Stronger image bad-image filter Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function isBadImage(url) {
   if (!url) return true;
   const s = String(url).toLowerCase();
@@ -178,7 +178,7 @@ function isBadImage(url) {
   if (s.startsWith('data:image/svg') || s.endsWith('.svg')) return true;
   if (/PHN2Z/.test(s)) return true; // base64 svg
 
-  // â”€â”€ Keyword-based exclusions (expanded) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Keyword-based exclusions (expanded) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   if (/\b(logo|logos|sprite|sprites|favicon|avatar|placeholder|spacer|pixel|blank|loading|tracking|banner|header|footer|badge|watermark|branding|navbar|navigation|overlay|spinner|advertisement|ribbon|sticker)\b/.test(s)) return true;
   if (/\/icon\/|\/icons\/|[_-]icon[_.@-]|icon[_.@-]\d|\/nav\/|\/menu\/|\/cart\/|\/checkout\/|\/ad[-_]|payment[-_]icon|payment[-_]method|trust[-_]badge|trust[-_]seal/.test(s)) return true;
   if (/hero[-_]banner|promo[-_]banner|category[-_]banner|category[-_]image|\/department\/|\/category\/|\/brand\/|brand[-_]logo|\/circular\/|\/hero\/|\/search\/|search[-_]icon/.test(s)) return true;
@@ -194,11 +194,11 @@ function isBadImage(url) {
   // Amazon non-product
   if (/ssl-images-amazon\.com/i.test(s) && /\/G\/|\/transparent\.|\/buttons?\/|\/ui\/|\/nav\//.test(s)) return true;
 
-  // Walmart non-product â€” block spark logo, app/delivery/store icons, badges, category images
+  // Walmart non-product Ã¢â‚¬â€ block spark logo, app/delivery/store icons, badges, category images
   if (/walmartimages\.com/i.test(s) && /\/spark\/|\/store\/|\/logo\/|\/icon\/|\/badge\/|\/footer\/|\/header\/|\/delivery\/|\/app\/|\/promo\/|\/circular\/|\/dept\/|\/category\/|\/brand\/|\/nav\/|\/hero\/|\/banner\//.test(s)) return true;
   // Walmart image filenames that are clearly UI chrome
   if (/walmartimages\.com/i.test(s) && /spark[-_]logo|walmart[-_]logo|wm[-_]logo|wm[-_]app|delivery[-_]icon|pickup[-_]icon|store[-_]icon/.test(s)) return true;
-  // Walmart inline JSON image patterns â€” small base64-encoded images from JSON are always UI
+  // Walmart inline JSON image patterns Ã¢â‚¬â€ small base64-encoded images from JSON are always UI
   if (/walmartimages\.com/i.test(s) && /\/\d{2,3}x\d{2,3}[?/]/.test(s)) return true;
 
   // Sam's Club non-product
@@ -213,7 +213,7 @@ function isBadImage(url) {
   return false;
 }
 
-// â”€â”€ DOM-context bad-image check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ DOM-context bad-image check Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // Returns true if the <img> element sits inside a non-product DOM region.
 function isBadImageElement(imgEl) {
   if (!imgEl) return false;
@@ -235,7 +235,7 @@ function isBadImageElement(imgEl) {
   return !!badParent;
 }
 
-// â”€â”€ ISSUE 4 FIX: Find the main product gallery container â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ ISSUE 4 FIX: Find the main product gallery container Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // Returns the DOM element that wraps the primary product image area,
 // or null if we cannot confidently identify one.
 function findProductGalleryContainer() {
@@ -291,7 +291,7 @@ function findProductGalleryContainer() {
     '[class*="product-image"]',
     // Etsy
     '.listing-page-image-carousel',
-    // Generic fallback â€” look for any element that contains multiple images
+    // Generic fallback Ã¢â‚¬â€ look for any element that contains multiple images
     // and is positioned in the upper portion of the page
     '[class*="media-gallery"]',
     '[class*="MediaGallery"]',
@@ -307,7 +307,7 @@ function findProductGalleryContainer() {
   }
 
   // Heuristic fallback: find the first element that contains
-  // â‰¥2 images all with naturalWidth > 150, is within the top 60% of the page,
+  // Ã¢â€°Â¥2 images all with naturalWidth > 150, is within the top 60% of the page,
   // and is not inside a recommendations / reviews / footer section.
   const badAncestorSel =
     '[class*="recommend"], [class*="similar"], [class*="related"], ' +
@@ -355,7 +355,7 @@ function dedupeImages(arr) {
   return out;
 }
 
-// â”€â”€ Video helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ Video helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const VID_REGEX = /\.(mp4|webm|m3u8)([\?#]|$)/i;
 const YT_REGEX  = /(youtube\.com\/(watch|embed|shorts|live)|youtu\.be\/)/i;
 
@@ -397,7 +397,7 @@ function dedupeVideos(arr) {
   return out;
 }
 
-// â”€â”€ DOM image collection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ DOM image collection Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function pickImgSrc(img) {
   return (
     img.getAttribute('data-old-hires') ||
@@ -491,7 +491,7 @@ function collectLiveMarketplaceImages(platform) {
   return out;
 }
 
-// â”€â”€ DOM video collection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ DOM video collection Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function collectDomVideos() {
   const out = [];
   document.querySelectorAll('video').forEach(v => {
@@ -513,7 +513,7 @@ function collectDomVideos() {
   return out;
 }
 
-// â”€â”€ Deep JSON media walker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ Deep JSON media walker Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // ISSUE 1 FIX: Only pick up price from offer/price-typed string fields
 // that already contain a currency symbol (e.g. "$29.98"), not bare numbers.
 // Bare numeric prices from JSON are unreliable and cause wrong price bugs.
@@ -541,7 +541,7 @@ function walkJsonForMedia(rootJson, found) {
       for (const [k, v] of Object.entries(json)) {
         if (typeof v === 'string') {
           if (!found.price && /^(price|currentPrice|salePrice|displayPrice|priceFormatted|formattedPrice|currentPriceFormatted)$/i.test(k)) {
-            if (/[$Â£â‚¬Â¥â‚¹â‚©]/.test(v) && /\d/.test(v)) {
+            if (/[$Ã‚Â£Ã¢â€šÂ¬Ã‚Â¥Ã¢â€šÂ¹Ã¢â€šÂ©]/.test(v) && /\d/.test(v)) {
               const cleaned = cleanPriceText(v);
               if (cleaned) found.price = cleaned;
             }
@@ -576,7 +576,7 @@ async function harvestInlineJson() {
     found.videos.push(clean);
   };
 
-  // â”€â”€ PRODUCT IDENTITY ANCHOR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ PRODUCT IDENTITY ANCHOR Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   // Derive a short fingerprint from the current page URL path so we can
   // reject images that belong to unrelated products embedded in the same
   // JSON blob (e.g. "Customers also bought" carousels on Amazon/Walmart).
@@ -618,14 +618,14 @@ async function harvestInlineJson() {
   // When we have a product key, reject images whose path contains a DIFFERENT
   // product ID of the same format (e.g. different ASIN embedded in image URL).
   function isLikelyCurrentProduct(imgUrl) {
-    if (!productPathKey || productPathKey.length < 6) return true; // no key â†’ accept all
+    if (!productPathKey || productPathKey.length < 6) return true; // no key Ã¢â€ â€™ accept all
     try {
       const path = new URL(imgUrl).pathname.toLowerCase();
-      // If the key appears in the image path â†’ definitely this product
+      // If the key appears in the image path Ã¢â€ â€™ definitely this product
       if (path.includes(productPathKey)) return true;
       // Amazon images embed the ASIN in their path. If there's a different
       // ASIN-like segment (10 uppercase alphanum chars) in the image path,
-      // reject it â€” it belongs to another product.
+      // reject it Ã¢â‚¬â€ it belongs to another product.
       if (/media-amazon\.com|ssl-images-amazon/i.test(imgUrl)) {
         const asinMatch = path.match(/\/([A-Z0-9]{10})\//i);
         if (asinMatch && asinMatch[1].toLowerCase() !== productPathKey) return false;
@@ -683,7 +683,7 @@ async function harvestInlineJson() {
       addFoundVideo(m[0]);
   }
 
-  // JSON-LD offer price â€” only use currency-bearing string prices
+  // JSON-LD offer price Ã¢â‚¬â€ only use currency-bearing string prices
   if (!found.price) {
     document.querySelectorAll('script[type="application/ld+json"]').forEach(s => {
       try {
@@ -700,7 +700,7 @@ async function harvestInlineJson() {
               const currency = o.priceCurrency || o.priceSpecification?.priceCurrency || '';
               if (rawPrice !== undefined && rawPrice !== null && rawPrice !== '') {
                 // Map currency code to symbol for display
-                const symMap = { USD: '$', GBP: 'Â£', EUR: 'â‚¬', JPY: 'Â¥', INR: 'â‚¹', KRW: 'â‚©', CAD: 'CA$', AUD: 'AU$', PKR: 'â‚¨' };
+                const symMap = { USD: '$', GBP: 'Ã‚Â£', EUR: 'Ã¢â€šÂ¬', JPY: 'Ã‚Â¥', INR: 'Ã¢â€šÂ¹', KRW: 'Ã¢â€šÂ©', CAD: 'CA$', AUD: 'AU$', PKR: 'Ã¢â€šÂ¨' };
                 const sym = symMap[currency.toUpperCase()] || (currency ? currency + ' ' : '$');
                 found.price = `${sym}${rawPrice}`.replace(/\s+/g, '');
                 break;
@@ -714,7 +714,7 @@ async function harvestInlineJson() {
     });
   }
 
-  // â”€â”€ POST-HARVEST PRODUCT FILTER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ POST-HARVEST PRODUCT FILTER Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   // Remove images that belong to other products embedded in the JSON
   // (related/upsell carousels, "also bought" grids, etc.)
   if (productPathKey) {
@@ -737,7 +737,7 @@ async function harvestInlineJson() {
   return found;
 }
 
-// â”€â”€ Variants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ Variants Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function collectVariants() {
   const out = [];
   document.querySelectorAll(
@@ -746,14 +746,14 @@ function collectVariants() {
     'button[aria-label*="Size" i], button[aria-label*="Color" i]'
   ).forEach(el => {
     const t = (el.innerText || el.textContent || el.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim();
-    if (t && t.length < 80 && !/^(select|choose|undefined|â€”|-)$/i.test(t) && !out.includes(t)) {
+    if (t && t.length < 80 && !/^(select|choose|undefined|Ã¢â‚¬â€|-)$/i.test(t) && !out.includes(t)) {
       out.push(t);
     }
   });
   return out.slice(0, 20);
 }
 
-// â”€â”€ Generic price lookup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ Generic price lookup Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function priceFromSelectors(selectors) {
   for (const sel of selectors) {
     for (const el of document.querySelectorAll(sel)) {
@@ -770,16 +770,16 @@ function priceFromSelectors(selectors) {
   return '';
 }
 
-// â”€â”€ Sam's Club precise price reader (v2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ Sam's Club precise price reader (v2) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // Sam's Club 2024/2025: price can be in multiple formats.
-// Priority: aria-label â†’ structured data â†’ characteristic+mantissa â†’ JSON-LD â†’ script
-// â”€â”€ Sam's Club precise price reader (v3 â€” fully rewritten) â”€â”€â”€
-// Priority order: aria-label â†’ split-price DOM â†’ meta itemprop â†’
-//   JSON-LD â†’ __NEXT_DATA__ deep walk â†’ inline script regex fallback
+// Priority: aria-label Ã¢â€ â€™ structured data Ã¢â€ â€™ characteristic+mantissa Ã¢â€ â€™ JSON-LD Ã¢â€ â€™ script
+// Ã¢â€â‚¬Ã¢â€â‚¬ Sam's Club precise price reader (v3 Ã¢â‚¬â€ fully rewritten) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// Priority order: aria-label Ã¢â€ â€™ split-price DOM Ã¢â€ â€™ meta itemprop Ã¢â€ â€™
+//   JSON-LD Ã¢â€ â€™ __NEXT_DATA__ deep walk Ã¢â€ â€™ inline script regex fallback
 function readSamsClubPrice() {
   const sym = detectPageCurrencySymbol() || '$';
 
-  // â”€â”€ 1. aria-label on price wrapper elements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ 1. aria-label on price wrapper elements Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const ariaEls = document.querySelectorAll(
     'span[aria-label], [data-testid="product-price"], [data-automation-id="product-price"], ' +
     '[class*="PriceDisplay"] span[aria-label], [class*="price-display"] span[aria-label], ' +
@@ -792,7 +792,7 @@ function readSamsClubPrice() {
     if (c && /\d/.test(c)) return ensureCurrency(c, sym);
   }
 
-  // â”€â”€ 2. Split-price: characteristic + mantissa â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ 2. Split-price: characteristic + mantissa Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const charEl = document.querySelector(
     '.Price-characteristic, [class*="Price-characteristic"], [class*="price-characteristic"], ' +
     '[class*="priceCharacteristic"], [class*="PriceCharacteristic"]'
@@ -807,7 +807,7 @@ function readSamsClubPrice() {
     if (whole) return frac ? `${sym}${whole}.${frac}` : `${sym}${whole}`;
   }
 
-  // â”€â”€ 3. itemprop="price" â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ 3. itemprop="price" Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const itmProp = document.querySelector('[itemprop="price"]');
   if (itmProp) {
     const raw = itmProp.getAttribute('content') || itmProp.innerText || itmProp.textContent || '';
@@ -815,7 +815,7 @@ function readSamsClubPrice() {
     if (c && /\d/.test(c)) return ensureCurrency(c, sym);
   }
 
-  // â”€â”€ 4. JSON-LD offer price â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ 4. JSON-LD offer price Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
     try {
       const root = JSON.parse(s.textContent || '{}');
@@ -829,7 +829,7 @@ function readSamsClubPrice() {
           for (const of_ of arr) {
             const p = of_.price || of_.lowPrice;
             if (p !== undefined && p !== null && p !== '') {
-              const symMap = { USD:'$', GBP:'Â£', EUR:'â‚¬', JPY:'Â¥', INR:'â‚¹', KRW:'â‚©', CAD:'CA$', AUD:'AU$' };
+              const symMap = { USD:'$', GBP:'Ã‚Â£', EUR:'Ã¢â€šÂ¬', JPY:'Ã‚Â¥', INR:'Ã¢â€šÂ¹', KRW:'Ã¢â€šÂ©', CAD:'CA$', AUD:'AU$' };
               const cur = of_.priceCurrency || '';
               const cs = symMap[cur.toUpperCase()] || sym;
               return `${cs}${p}`;
@@ -841,7 +841,7 @@ function readSamsClubPrice() {
     } catch (_) {}
   }
 
-  // â”€â”€ 5. __NEXT_DATA__ deep walk â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ 5. __NEXT_DATA__ deep walk Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const nextEl = document.getElementById('__NEXT_DATA__');
   if (nextEl) {
     try {
@@ -900,7 +900,7 @@ function readSamsClubPrice() {
     } catch (_) {}
   }
 
-  // â”€â”€ 6. Inline script regex fallback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ 6. Inline script regex fallback Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   for (const s of document.querySelectorAll('script:not([src])')) {
     const t = s.textContent || '';
     if (t.length < 50 || t.length > 3_000_000) continue;
@@ -909,7 +909,7 @@ function readSamsClubPrice() {
     if (m && parseFloat(m[1]) > 0) return `${sym}${parseFloat(m[1]).toFixed(2)}`;
   }
 
-  // â”€â”€ 7. Generic DOM fallback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ 7. Generic DOM fallback Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const genericSelectors = [
     '[data-testid="price"]', '[data-automation-id="price"]',
     '[class*="price-display"]', '[class*="PriceDisplay"]',
@@ -928,7 +928,7 @@ function readSamsClubPrice() {
 }
 
 
-// â”€â”€ ISSUE 1 FIX: Walmart precise price reader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ ISSUE 1 FIX: Walmart precise price reader Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function readWalmartPrice() {
   // Prefer aria-label on the price wrapper (has the full formatted price)
   const ariaSelectors = [
@@ -936,8 +936,8 @@ function readWalmartPrice() {
     '[data-automation-id="product-price"] [itemprop="price"]',
     '[data-automation-id="product-price"]',
     'span[aria-label*="$"]',
-    'span[aria-label*="Â£"]',
-    'span[aria-label*="â‚¬"]'
+    'span[aria-label*="Ã‚Â£"]',
+    'span[aria-label*="Ã¢â€šÂ¬"]'
   ];
   for (const sel of ariaSelectors) {
     for (const el of document.querySelectorAll(sel)) {
@@ -958,7 +958,7 @@ function readWalmartPrice() {
   return '';
 }
 
-// â”€â”€ ISSUE 3 FIX: Universal e-commerce price reader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ ISSUE 3 FIX: Universal e-commerce price reader Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // Reads price from any e-commerce page using a priority waterfall.
 function universalPrice() {
   const sym = detectPageCurrencySymbol();
@@ -1004,9 +1004,9 @@ function universalPrice() {
   return '';
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 //                  PLATFORM SCRAPERS
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 // ISSUE 4 FIX: All scrapers now collect images from gallery scope only,
 // not from the full document.
@@ -1016,7 +1016,7 @@ function scrapeAmazon() {
 
   const titleEl = document.querySelector('#productTitle, #title span, h1.a-size-large, #title_feature_div #title');
   if (titleEl) r.title = titleEl.innerText.trim();
-  // If DOM title is empty (e.g. page still loading), try og:title â€” never fall back to document.title
+  // If DOM title is empty (e.g. page still loading), try og:title Ã¢â‚¬â€ never fall back to document.title
   // because Amazon sets it to "Adding to Cart..." during cart operations.
   if (!r.title) {
     const og = document.querySelector('meta[property="og:title"]');
@@ -1038,7 +1038,7 @@ function scrapeAmazon() {
     if (w) r.price = `$${w}.${f}`;
   }
 
-  // â”€â”€ TWO-TIER URL QUALITY STRATEGY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ TWO-TIER URL QUALITY STRATEGY Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   //
   // PROBLEM: Different Amazon JSON keys have different URL quality contracts:
   //   "hiRes"  = true original upload URL (clean or has modifier, always best)
@@ -1046,26 +1046,26 @@ function scrapeAmazon() {
   //   "thumb"  = tiny thumbnail URL
   //
   // WRONG approach (caused the bug): stripping modifier from ALL sources.
-  //   For "hiRes" â†’ strip modifier â†’ clean URL â†’ Amazon serves ORIGINAL âœ…
-  //   For "large" â†’ strip modifier â†’ clean URL â†’ Amazon may serve DEFAULT
-  //                 size (e.g. 500px) which is WORSE than the original _SL1500_ âŒ
+  //   For "hiRes" Ã¢â€ â€™ strip modifier Ã¢â€ â€™ clean URL Ã¢â€ â€™ Amazon serves ORIGINAL Ã¢Å“â€¦
+  //   For "large" Ã¢â€ â€™ strip modifier Ã¢â€ â€™ clean URL Ã¢â€ â€™ Amazon may serve DEFAULT
+  //                 size (e.g. 500px) which is WORSE than the original _SL1500_ Ã¢ÂÅ’
   //
   // CORRECT approach: different treatment per source:
-  //   "hiRes"  â†’ strip modifier â†’ clean URL â†’ original upload quality
-  //   "large"  â†’ replace modifier with _SL1500_ â†’ guaranteed 1500px
-  //   "thumb"  â†’ replace modifier with _SL1500_ â†’ guaranteed 1500px
-  //   raw scan â†’ replace modifier with _SL1500_ â†’ guaranteed 1500px
+  //   "hiRes"  Ã¢â€ â€™ strip modifier Ã¢â€ â€™ clean URL Ã¢â€ â€™ original upload quality
+  //   "large"  Ã¢â€ â€™ replace modifier with _SL1500_ Ã¢â€ â€™ guaranteed 1500px
+  //   "thumb"  Ã¢â€ â€™ replace modifier with _SL1500_ Ã¢â€ â€™ guaranteed 1500px
+  //   raw scan Ã¢â€ â€™ replace modifier with _SL1500_ Ã¢â€ â€™ guaranteed 1500px
   //
-  // This way: products where ALL images have hiRes â†’ original quality for all.
-  //           Products where SOME images have hiRes=null â†’ 1500px for those.
+  // This way: products where ALL images have hiRes Ã¢â€ â€™ original quality for all.
+  //           Products where SOME images have hiRes=null Ã¢â€ â€™ 1500px for those.
 
-  // For hiRes source: strip modifier entirely â†’ original upload quality
+  // For hiRes source: strip modifier entirely Ã¢â€ â€™ original upload quality
   function cleanHiRes(url) {
     if (!url || typeof url !== 'string' || !url.startsWith('http')) return null;
     return url.replace(/\._[A-Za-z0-9_,]+_\./g, '.');
   }
 
-  // For large/thumb/fallback: replace modifier with _SL1500_ â†’ guaranteed 1500px
+  // For large/thumb/fallback: replace modifier with _SL1500_ Ã¢â€ â€™ guaranteed 1500px
   // NOT stripping, because Amazon may not CDN-cache the original for these paths.
   function upscaleTo1500(url) {
     if (!url || typeof url !== 'string' || !url.startsWith('http')) return null;
@@ -1074,7 +1074,7 @@ function scrapeAmazon() {
 
   const seenKeys = new Set();
 
-  // Add image from hiRes source â†’ original quality
+  // Add image from hiRes source Ã¢â€ â€™ original quality
   function addHiResImg(url) {
     const clean = cleanHiRes(url);
     if (!clean) return;
@@ -1084,7 +1084,7 @@ function scrapeAmazon() {
     r.images.push(clean);
   }
 
-  // Add image from fallback source â†’ 1500px quality
+  // Add image from fallback source Ã¢â€ â€™ 1500px quality
   function addFallbackImg(url) {
     const sized = upscaleTo1500(url);
     if (!sized) return;
@@ -1115,7 +1115,7 @@ function scrapeAmazon() {
     });
   });
 
-  // Pass 1: Script tag JSON extraction â€” only if the visible gallery was empty.
+  // Pass 1: Script tag JSON extraction Ã¢â‚¬â€ only if the visible gallery was empty.
   const scripts = document.querySelectorAll('script');
   if (r.images.length === 0) for (const script of scripts) {
     const t = script.textContent || '';
@@ -1124,22 +1124,22 @@ function scrapeAmazon() {
 
     let match;
 
-    // "hiRes" â†’ original quality (strip modifier â†’ clean URL)
+    // "hiRes" Ã¢â€ â€™ original quality (strip modifier Ã¢â€ â€™ clean URL)
     const hiResDQ = /"hiRes"\s*:\s*"(https:\/\/[^"]+)"/g;
     while ((match = hiResDQ.exec(t)) !== null) addHiResImg(match[1]);
 
     const hiResSQ = /'hiRes'\s*:\s*'(https:\/\/[^']+)'/g;
     while ((match = hiResSQ.exec(t)) !== null) addHiResImg(match[1]);
 
-    // "large" â†’ 1500px quality (keep/replace with _SL1500_)
+    // "large" Ã¢â€ â€™ 1500px quality (keep/replace with _SL1500_)
     const largeDQ = /"large"\s*:\s*"(https:\/\/[^"]+)"/g;
     while ((match = largeDQ.exec(t)) !== null) addFallbackImg(match[1]);
 
-    // "thumb" â†’ upscale to 1500px
+    // "thumb" Ã¢â€ â€™ upscale to 1500px
     const thumbDQ = /"thumb"\s*:\s*"(https:\/\/[^"]+)"/g;
     while ((match = thumbDQ.exec(t)) !== null) addFallbackImg(match[1]);
 
-    // "main":{...} â€” extract all URLs and upscale to 1500px
+    // "main":{...} Ã¢â‚¬â€ extract all URLs and upscale to 1500px
     const mainKeyRegex = /"main"\s*:\s*\{/g;
     let mk;
     while ((mk = mainKeyRegex.exec(t)) !== null) {
@@ -1155,7 +1155,7 @@ function scrapeAmazon() {
     }
   }
 
-  // Pass 2: Raw Amazon CDN URL scan â€” only if targeted script extraction found nothing.
+  // Pass 2: Raw Amazon CDN URL scan Ã¢â‚¬â€ only if targeted script extraction found nothing.
   if (r.images.length === 0) for (const script of scripts) {
     const t = script.textContent || '';
     const rawScan = /https:\/\/(?:m\.media-amazon\.com|images-amazon\.com)\/images\/I\/[A-Za-z0-9%+\-_.]+\.(?:jpg|jpeg|png|webp)/g;
@@ -1194,7 +1194,7 @@ function scrapeAmazon() {
 
 
 
-  // â”€â”€ AMAZON VIDEO EXTRACTION â€” Multi-pass with dedup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ AMAZON VIDEO EXTRACTION Ã¢â‚¬â€ Multi-pass with dedup Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   // Amazon embeds video data in several places:
   //   1. Standard mp4/m3u8 URLs in script tags
   //   2. Amazon-specific JSON keys: videoDisplayInfos, videoSrc, immersionVideoUrl, videoCatalogUrl
@@ -1231,7 +1231,7 @@ function scrapeAmazon() {
       for (const m of t.matchAll(/"videoThumbnailUrl"\s*:\s*"(https?:[^"]+\.(?:mp4|m3u8)[^"]*)"/gi)) addAmazonVideo(m[1]);
     }
 
-    // Pass 3: Amazon CDN URLs â€” aiv-delivery.net and video.media-amazon.com
+    // Pass 3: Amazon CDN URLs Ã¢â‚¬â€ aiv-delivery.net and video.media-amazon.com
     // These appear even without .mp4 extension in the URL string.
     if (/aiv-delivery\.net|video\.media-amazon\.com/i.test(t)) {
       for (const m of t.matchAll(/https?:\/\/[^"'\s\\]*(?:aiv-delivery\.net|video\.media-amazon\.com)[^"'\s\\]*/gi))
@@ -1277,7 +1277,7 @@ function scrapeWalmart() {
     return src.split('?')[0]; // strip params universally for clean dedup
   };
 
-  // Strategy 1: __NEXT_DATA__ JSON (most reliable â€” contains full-res URLs directly)
+  // Strategy 1: __NEXT_DATA__ JSON (most reliable Ã¢â‚¬â€ contains full-res URLs directly)
   // ROOT CAUSE of duplicates: Walmart __NEXT_DATA__ embeds the same imageInfo.allImages
   // in MULTIPLE locations (product root + contentLayout modules + variantMap). A generic
   // DFS with early exit can still find two sibling nodes at the same depth.
@@ -1384,14 +1384,14 @@ function scrapeWalmart() {
         });
       }
 
-      // Brightcove: sources[] â€” array of {src, type}
+      // Brightcove: sources[] Ã¢â‚¬â€ array of {src, type}
       if (Array.isArray(obj.sources)) {
         obj.sources.forEach(s => {
           if (s && typeof s.src === 'string') addWmVid(s.src);
         });
       }
 
-      // Brightcove: renditions[] â€” pick highest quality
+      // Brightcove: renditions[] Ã¢â‚¬â€ pick highest quality
       if (Array.isArray(obj.renditions) && obj.renditions.length > 0) {
         const sorted = [...obj.renditions]
           .filter(rd => rd && typeof rd.url === 'string')
@@ -1434,7 +1434,7 @@ function scrapeSamsClub() {
     return src.split('?')[0];
   };
 
-  // Strategy 1: __NEXT_DATA__ JSON â€” assets[].largeImage or zoomImage (highest quality fields)
+  // Strategy 1: __NEXT_DATA__ JSON Ã¢â‚¬â€ assets[].largeImage or zoomImage (highest quality fields)
   // Use targeted path navigation to avoid collecting assets from recommendation panels.
   const nextEl = document.getElementById('__NEXT_DATA__');
   if (nextEl) {
@@ -1509,7 +1509,7 @@ function scrapeSamsClub() {
 
   // Extract videos from __NEXT_DATA__ JSON
   // Sam's Club shares Walmart's Next.js infrastructure BUT uses Brightcove player.
-  // Brightcove stores video in sources[].src and renditions[].url â€” NOT mediaAssets[].
+  // Brightcove stores video in sources[].src and renditions[].url Ã¢â‚¬â€ NOT mediaAssets[].
   try {
     const nd = JSON.parse(document.getElementById('__NEXT_DATA__')?.textContent || '{}');
     const _scVidSeen = new Set();
@@ -1531,14 +1531,14 @@ function scrapeSamsClub() {
         });
       }
 
-      // Brightcove: sources[] â€” array of {src, type} objects
+      // Brightcove: sources[] Ã¢â‚¬â€ array of {src, type} objects
       if (Array.isArray(obj.sources)) {
         obj.sources.forEach(s => {
           if (s && typeof s.src === 'string') addScVid(s.src);
         });
       }
 
-      // Brightcove: renditions[] â€” pick highest quality (sort by encodingRate desc)
+      // Brightcove: renditions[] Ã¢â‚¬â€ pick highest quality (sort by encodingRate desc)
       if (Array.isArray(obj.renditions) && obj.renditions.length > 0) {
         const sorted = [...obj.renditions]
           .filter(rd => rd && typeof rd.url === 'string')
@@ -1555,7 +1555,7 @@ function scrapeSamsClub() {
       Object.values(obj).forEach(v => { if (v && typeof v === 'object') scanScVideos(v, depth + 1); });
     })(nd, 0);
 
-    // Inline <script> scan â€” catches Brightcove JSON not in __NEXT_DATA__
+    // Inline <script> scan Ã¢â‚¬â€ catches Brightcove JSON not in __NEXT_DATA__
     document.querySelectorAll('script:not([src])').forEach(s => {
       const t = s.textContent || '';
       if (t.length < 50 || t.length > 3_000_000) return;
@@ -1578,7 +1578,7 @@ function scrapeFaire() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
   const sym = detectPageCurrencySymbol() || '$';
 
-  // â”€â”€ Title â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Title Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const titleEl = document.querySelector(
     'h1[class*="product"], h1[class*="Product"], h1[class*="title"], h1[class*="Title"], ' +
     '[data-testid*="product-title"], [data-testid*="productTitle"], ' +
@@ -1586,7 +1586,7 @@ function scrapeFaire() {
   );
   if (titleEl) r.title = titleEl.innerText.trim();
 
-  // â”€â”€ Price: Strategy 1 â€” __NEXT_DATA__ deep walk (most reliable for Faire) â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Price: Strategy 1 Ã¢â‚¬â€ __NEXT_DATA__ deep walk (most reliable for Faire) Ã¢â€â‚¬Ã¢â€â‚¬
   const nextDataEl = document.getElementById('__NEXT_DATA__');
   if (nextDataEl) {
     try {
@@ -1651,7 +1651,7 @@ function scrapeFaire() {
     } catch (_) {}
   }
 
-  // â”€â”€ Price: Strategy 2 â€” DOM selectors (Faire-specific) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Price: Strategy 2 Ã¢â‚¬â€ DOM selectors (Faire-specific) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   if (!r.price) {
     r.price = priceFromSelectors([
       '[data-testid="wholesale-price"]', '[data-testid="retail-price"]',
@@ -1667,7 +1667,7 @@ function scrapeFaire() {
     if (r.price) r.price = ensureCurrency(r.price, sym);
   }
 
-  // â”€â”€ Price: Strategy 3 â€” JSON-LD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Price: Strategy 3 Ã¢â‚¬â€ JSON-LD Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   if (!r.price) {
     for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
       try {
@@ -1682,7 +1682,7 @@ function scrapeFaire() {
             for (const of_ of arr) {
               const p = of_.price || of_.lowPrice;
               if (p !== undefined && p !== null && p !== '') {
-                const symMap = { USD:'$', GBP:'Â£', EUR:'â‚¬', JPY:'Â¥', INR:'â‚¹', KRW:'â‚©', CAD:'CA$', AUD:'AU$' };
+                const symMap = { USD:'$', GBP:'Ã‚Â£', EUR:'Ã¢â€šÂ¬', JPY:'Ã‚Â¥', INR:'Ã¢â€šÂ¹', KRW:'Ã¢â€šÂ©', CAD:'CA$', AUD:'AU$' };
                 const cur = of_.priceCurrency || '';
                 const cs = symMap[cur.toUpperCase()] || sym;
                 r.price = `${cs}${p}`;
@@ -1698,7 +1698,7 @@ function scrapeFaire() {
     }
   }
 
-  // â”€â”€ Images: Fallback DOM scan â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Images: Fallback DOM scan Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   if (r.images.length === 0) {
     const galleryScope = document.querySelector(
       '[data-testid*="product-image"], [class*="ProductImages"], ' +
@@ -1726,7 +1726,7 @@ function scrapeAlibaba() {
   if (t) r.title = t.innerText.trim();
   const pe = document.querySelector('.price, [class*="price-info"], [class*="product-price"], [class*="ma-spec-price"]');
   if (pe) {
-    const nums = (pe.innerText || '').match(/[$Â£â‚¬]?\s*\d{1,3}(?:[,.\s]\d{3})*(?:\.\d{1,2})?/g);
+    const nums = (pe.innerText || '').match(/[$Ã‚Â£Ã¢â€šÂ¬]?\s*\d{1,3}(?:[,.\s]\d{3})*(?:\.\d{1,2})?/g);
     if (nums?.length >= 2) r.price = `${nums[0].trim()} - ${nums[1].trim()}`;
     else if (nums?.length === 1) r.price = nums[0].trim();
   }
@@ -1770,7 +1770,7 @@ async function scrapeTemu() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
   const sym = detectPageCurrencySymbol() || '$';
 
-  // â”€â”€ Title â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Title Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const titleEl = document.querySelector(
     '[class*="goods-name"], [class*="GoodsName"], [class*="ProductTitle"], ' +
     '[class*="product-title"], [class*="detail-title"], ' +
@@ -1778,19 +1778,19 @@ async function scrapeTemu() {
   );
   if (titleEl) r.title = titleEl.innerText.trim();
 
-  // â”€â”€ Helper: upgrade CDN thumbnail URL to full-resolution origin â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Helper: upgrade CDN thumbnail URL to full-resolution origin Ã¢â€â‚¬Ã¢â€â‚¬
   // Temu CDNs use suffixes like /thumbnail/200x200 or ?x-oss-process=image/resize,w_200
   // Replacing these gives the full-size product image instead of a preview.
   const temuOriginUrl = (u) => {
     if (!u || typeof u !== 'string') return u;
     return u
-      .replace(/\/thumbnail\/\d+x\d+/gi, '/origin')           // /thumbnail/200x200 â†’ /origin
+      .replace(/\/thumbnail\/\d+x\d+/gi, '/origin')           // /thumbnail/200x200 Ã¢â€ â€™ /origin
       .replace(/\?x-oss-process=image\/resize[^&"]*/gi, '')   // strip Aliyun resize param
       .replace(/[?&]image_resize=\d+/gi, '')                   // strip ?image_resize=300
       .replace(/\?$/, '');                                     // clean trailing ?
   };
 
-  // â”€â”€ Price + Images + Videos: Strategy 1 â€” window.__init_data__ â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Price + Images + Videos: Strategy 1 Ã¢â‚¬â€ window.__init_data__ Ã¢â€â‚¬Ã¢â€â‚¬
   // Content scripts run in an isolated world; __init_data__ is a page-world global.
   // We inject a <script> to postMessage it back to the content script.
   try {
@@ -1814,7 +1814,7 @@ async function scrapeTemu() {
     });
 
     if (temuData) {
-      // FIX A1: Walk the FULL tree â€” never return early.
+      // FIX A1: Walk the FULL tree Ã¢â‚¬â€ never return early.
       // Images are collected on every node. Price is captured on first match.
       // Videos are also collected alongside images.
       const priceKeys = ['sale_price', 'salePrice', 'price', 'promotion_price',
@@ -1831,7 +1831,7 @@ async function scrapeTemu() {
       function walkTemuInitData(obj, depth) {
         if (!obj || typeof obj !== 'object' || depth > 18) return;
 
-        // â”€â”€ Collect images â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Ã¢â€â‚¬Ã¢â€â‚¬ Collect images Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         for (const k of imgKeys) {
           if (k in obj && typeof obj[k] === 'string' && obj[k]) {
             const clean = temuOriginUrl(obj[k]);
@@ -1842,7 +1842,7 @@ async function scrapeTemu() {
           }
         }
 
-        // â”€â”€ Collect videos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Ã¢â€â‚¬Ã¢â€â‚¬ Collect videos Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         for (const k of vidKeys) {
           if (k in obj && typeof obj[k] === 'string' && obj[k]) {
             const v = obj[k].replace(/\\\//g, '/');
@@ -1853,7 +1853,7 @@ async function scrapeTemu() {
           }
         }
 
-        // â”€â”€ Capture price (first found, non-returning) â”€â”€â”€â”€â”€â”€â”€
+        // Ã¢â€â‚¬Ã¢â€â‚¬ Capture price (first found, non-returning) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         if (!r.price) {
           for (const k of priceKeys) {
             if (k in obj) {
@@ -1870,7 +1870,7 @@ async function scrapeTemu() {
           }
         }
 
-        // â”€â”€ Recurse into children (always, no early exit) â”€â”€â”€â”€
+        // Ã¢â€â‚¬Ã¢â€â‚¬ Recurse into children (always, no early exit) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
         if (Array.isArray(obj)) {
           obj.forEach(v => { if (v && typeof v === 'object') walkTemuInitData(v, depth + 1); });
         } else {
@@ -1882,10 +1882,10 @@ async function scrapeTemu() {
     }
   } catch (_) {}
 
-  // â”€â”€ Price: Strategy 2 â€” DOM selectors (specific â†’ generic) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Price: Strategy 2 Ã¢â‚¬â€ DOM selectors (specific Ã¢â€ â€™ generic) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   if (!r.price) {
     r.price = priceFromSelectors([
-      // Temu uses CSS modules â€” look for price-like classes avoiding strikethrough
+      // Temu uses CSS modules Ã¢â‚¬â€ look for price-like classes avoiding strikethrough
       '[data-testid="price"]', '[data-testid="selling-price"]',
       '[data-testid*="current-price"]', '[data-testid*="sale-price"]',
       '[class*="price-sale"]', '[class*="priceSale"]',
@@ -1902,7 +1902,7 @@ async function scrapeTemu() {
     if (r.price) r.price = ensureCurrency(r.price, sym);
   }
 
-  // â”€â”€ Price: Strategy 3 â€” inline script regex (multiple patterns) â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Price: Strategy 3 Ã¢â‚¬â€ inline script regex (multiple patterns) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   if (!r.price) {
     for (const s of document.querySelectorAll('script:not([src])')) {
       const t = s.textContent || '';
@@ -1930,7 +1930,7 @@ async function scrapeTemu() {
     }
   }
 
-  // â”€â”€ Images: Strategy 2 â€” inline scripts (fallback when __init_data__ had no images) â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Images: Strategy 2 Ã¢â‚¬â€ inline scripts (fallback when __init_data__ had no images) Ã¢â€â‚¬Ã¢â€â‚¬
   // FIX A2: apply temuOriginUrl() so CDN thumbnail URLs become full-resolution
   if (r.images.length === 0) {
     const scriptTexts = [];
@@ -1961,7 +1961,7 @@ async function scrapeTemu() {
     }
   }
 
-  // â”€â”€ Images: Strategy 3 â€” application/json scripts â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Images: Strategy 3 Ã¢â‚¬â€ application/json scripts Ã¢â€â‚¬Ã¢â€â‚¬
   // FIX A2: apply temuOriginUrl() here too
   if (r.images.length === 0) {
     document.querySelectorAll('script[type="application/json"]').forEach(s => {
@@ -1982,7 +1982,7 @@ async function scrapeTemu() {
     });
   }
 
-  // â”€â”€ Images: Strategy 4 â€” DOM gallery scan â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Images: Strategy 4 Ã¢â‚¬â€ DOM gallery scan Ã¢â€â‚¬Ã¢â€â‚¬
   // FIX A2: temuOriginUrl() already applied here (was the only working strategy before)
   if (r.images.length === 0) {
     const galleryScope = document.querySelector(
@@ -2000,7 +2000,7 @@ async function scrapeTemu() {
     });
   }
 
-  // â”€â”€ Videos: Strategy 2 â€” inline script regex (A3 fallback) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Videos: Strategy 2 Ã¢â‚¬â€ inline script regex (A3 fallback) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   if (r.videos.length === 0) {
     for (const s of document.querySelectorAll('script:not([src])')) {
       const t = s.textContent || '';
@@ -2069,7 +2069,7 @@ function scrapeShopify() {
   return r;
 }
 
-// â”€â”€ ISSUE 3 FIX: Flipkart scraper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ ISSUE 3 FIX: Flipkart scraper Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function scrapeFlipkart() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
   const t = document.querySelector('span[class*="B_NuCI"], h1, [class*="product-title"]');
@@ -2077,7 +2077,7 @@ function scrapeFlipkart() {
   r.price = priceFromSelectors([
     '._30jeq3._16Jk6d', '._30jeq3', '[class*="finalPrice"]', '[class*="price"]'
   ]);
-  if (r.price) r.price = ensureCurrency(r.price, 'â‚¹');
+  if (r.price) r.price = ensureCurrency(r.price, 'Ã¢â€šÂ¹');
 
   const galleryScope = document.querySelector('._3kidJX, [class*="imgWrapper"], [class*="ImageGallery"]') || findProductGalleryContainer() || document;
   collectImagesBySelector('._2r_T1I img, ._3kidJX img, [class*="productImage"] img, [class*="imgWrapper"] img', galleryScope)
@@ -2085,7 +2085,7 @@ function scrapeFlipkart() {
   return r;
 }
 
-// â”€â”€ ISSUE 3 FIX: Noon scraper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ ISSUE 3 FIX: Noon scraper Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function scrapeNoon() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
   const t = document.querySelector('h1, [class*="productTitle"], [class*="product-title"]');
@@ -2098,7 +2098,7 @@ function scrapeNoon() {
   return r;
 }
 
-// â”€â”€ ISSUE 3 FIX: Etsy scraper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ ISSUE 3 FIX: Etsy scraper Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function scrapeEtsy() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
   const t = document.querySelector('h1, [class*="listing-page-title"], [data-buy-box-listing-title]');
@@ -2115,7 +2115,7 @@ function scrapeEtsy() {
   return r;
 }
 
-// â”€â”€ ISSUE 3 FIX: Shein scraper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ ISSUE 3 FIX: Shein scraper Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function scrapeShein() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
   const t = document.querySelector('h1, [class*="goods-name"], [class*="product-intro__head-name"]');
@@ -2152,7 +2152,7 @@ function scrapeYouTube() {
   return r;
 }
 
-// â”€â”€ Golf Retail scraper (Shopify based) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ Golf Retail scraper (Shopify based) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function scrapeGolfRetail() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
   const sym = detectPageCurrencySymbol() || '$';
@@ -2184,7 +2184,7 @@ function scrapeGolfRetail() {
   return r;
 }
 
-// â”€â”€ World Wide Golf Balls / Worldwide Golf Shops scraper â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ World Wide Golf Balls / Worldwide Golf Shops scraper Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // Both worldwidegolfballs.com and worldwidegolfshops.com
 function scrapeWorldwideGolfBalls() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
@@ -2235,7 +2235,7 @@ function scrapeWorldwideGolfBalls() {
   return r;
 }
 
-// â”€â”€ Upgrade 1: Target, Costco, Home Depot, Best Buy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ Upgrade 1: Target, Costco, Home Depot, Best Buy Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function scrapeTarget() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
   const sym = detectPageCurrencySymbol() || '$';
@@ -2295,7 +2295,7 @@ function scrapeBestBuy() {
   return r;
 }
 
-// â”€â”€ ISSUE 3 FIX: Universal generic scraper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ ISSUE 3 FIX: Universal generic scraper Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 // Works on any e-commerce site with JSON-LD or structured markup.
 function scrapeGeneric() {
   const r = { title: '', price: '', images: [], videos: [], variants: [] };
@@ -2362,7 +2362,7 @@ function scrapeGeneric() {
   return r;
 }
 
-// â”€â”€ Enhancement (Merge) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ Enhancement (Merge) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function mergeUnique(target, items, keyFn) {
   const seen = new Set(target.map(keyFn));
   for (const it of items) {
@@ -2401,11 +2401,11 @@ async function enhanceWithGlobals(data) {
   mergeUnique(data.videos, harvested.videos, x => (YT_REGEX.test(x) ? ytWatch(x) : x));
 
   // ISSUE 1 FIX: Only use harvested price if it has a currency symbol
-  if (!data.price && harvested.price && /[$Â£â‚¬Â¥â‚¹â‚©]/.test(harvested.price)) {
+  if (!data.price && harvested.price && /[$Ã‚Â£Ã¢â€šÂ¬Ã‚Â¥Ã¢â€šÂ¹Ã¢â€šÂ©]/.test(harvested.price)) {
     data.price = harvested.price;
   }
 
-  // OG / twitter image fallbacks â€” use mergeUnique so they don't duplicate
+  // OG / twitter image fallbacks Ã¢â‚¬â€ use mergeUnique so they don't duplicate
   // images already collected from the gallery or JSON harvest.
   const ogImages = [];
   document.querySelectorAll('meta[property="og:image"], meta[property="og:image:secure_url"], meta[name="twitter:image"]')
@@ -2424,7 +2424,7 @@ async function enhanceWithGlobals(data) {
   return data;
 }
 
-// â”€â”€ ISSUE 3 FIX: Dispatcher â€” expanded platform detection â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ ISSUE 3 FIX: Dispatcher Ã¢â‚¬â€ expanded platform detection Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 function pickPlatform() {
   const h = host();
   if (h.includes('amazon.'))                                  return scrapeAmazon;
@@ -2455,7 +2455,7 @@ function pickPlatform() {
   )) return scrapeShopify;
   // Detect BigCommerce
   if (document.querySelector('[data-product-option-change], [class*="ProductView"], .productView')) return scrapeShopify;
-  // Fallback: check JSON-LD for Product type â€” use generic with full power
+  // Fallback: check JSON-LD for Product type Ã¢â‚¬â€ use generic with full power
   return scrapeGeneric;
 }
 
@@ -2489,8 +2489,8 @@ async function scrapePageData() {
   const candidateTitle = (data.title || docTitle || '').trim();
   data.title = BAD_TITLE.test(candidateTitle) ? '' : candidateTitle;
 
-  // ISSUE 1 FIX: Ensure price has a currency symbol â€” detect from page
-  if (data.price && !/[$Â£â‚¬Â¥â‚¹â‚©]/.test(data.price) && !/^(USD|CAD|AUD|GBP|EUR|PKR|INR)/i.test(data.price)) {
+  // ISSUE 1 FIX: Ensure price has a currency symbol Ã¢â‚¬â€ detect from page
+  if (data.price && !/[$Ã‚Â£Ã¢â€šÂ¬Ã‚Â¥Ã¢â€šÂ¹Ã¢â€šÂ©]/.test(data.price) && !/^(USD|CAD|AUD|GBP|EUR|PKR|INR)/i.test(data.price)) {
     const sym = detectPageCurrencySymbol();
     data.price = `${sym}${data.price}`;
   }
@@ -2504,7 +2504,7 @@ async function scrapePageData() {
 }
 
 
-// â”€â”€ Message Listener â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ Message Listener Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   try {
     if (message?.action === 'SCRAPE_PAGE') {
@@ -2555,7 +2555,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return true;
 });
 
-// â”€â”€ In-Page ZHunter Floating Button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ In-Page ZHunter Floating Button Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 (function() {
   const BG_PLATFORM_KEYS = [
     'walmart.com', 'amazon.', 'samsclub.com', 'faire.com', 'aliexpress.',
@@ -2573,7 +2573,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const isProductDomain = BG_PLATFORM_KEYS.some(k => currentHost.includes(k));
   if (!isProductDomain) return;
 
-  // Step 2: Must be an actual product page â€” NOT search/category/home
+  // Step 2: Must be an actual product page Ã¢â‚¬â€ NOT search/category/home
   const PRODUCT_URL_PATTERNS = [
     /\/ip\//,           // Walmart: /ip/product-name/12345
     /\/dp\//,           // Amazon: /dp/ASIN
@@ -2723,11 +2723,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     const btn = document.createElement('button');
     btn.className = 'zhunter-btn';
-    btn.innerHTML = '<span class="zhunter-icon">âš¡</span><span>Add to Queue</span>';
+    btn.innerHTML = '<span class="zhunter-icon">Ã¢Å¡Â¡</span><span>Add to Queue</span>';
 
     const toast = document.createElement('div');
     toast.className = 'zhunter-toast';
-    toast.innerHTML = '<span>ðŸš€</span><span>Product added to ZHunter Queue!</span>';
+    toast.innerHTML = '<span>Ã°Å¸Å¡â‚¬</span><span>Product added to ZHunter Queue!</span>';
 
     wrap.appendChild(btn);
     shadow.appendChild(wrap);
@@ -2755,7 +2755,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     function markAdded() {
       btn.classList.add('added');
-      btn.innerHTML = '<span class="zhunter-icon">âœ“</span><span>Queued</span>';
+      btn.innerHTML = '<span class="zhunter-icon">Ã¢Å“â€œ</span><span>Queued</span>';
     }
 
     function showToast() {
@@ -2814,7 +2814,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 })();
 
-// â”€â”€ ZHunter In-Page Image Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬ ZHunter In-Page Image Panel Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 (function () {
   const PANEL_ID = 'zhunter-img-panel-root';
   const IMG_PLATFORM_KEYS = [
@@ -2844,7 +2844,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (NON_PRODUCT_PATTERNS.some(p => p.test(path) || p.test(href))) return;
   if (!PRODUCT_PATH_PATTERNS.some(p => p.test(path) || p.test(href))) return;
 
-  // â”€â”€ Image Collector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Image Collector Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   function collectPageImages() {
     const seen = new Set();
     const imgs = [];
@@ -2910,7 +2910,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return imgs.slice(0, 20);
   }
 
-  // â”€â”€ Download helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Download helper Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   function downloadViaBackground(url, filename) {
     chrome.runtime.sendMessage({ action: 'FETCH_BASE64', url }, res => {
       if (chrome.runtime.lastError || !res?.base64) {
@@ -2933,7 +2933,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     });
   }
 
-  // â”€â”€ Init Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Init Panel Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   function initImagePanel() {
     if (document.getElementById(PANEL_ID)) return;
 
@@ -3023,7 +3023,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .img-wrap.selected .img-check {
         background: #00e5ff; border-color: #00e5ff;
       }
-      .img-wrap.selected .img-check::after { content: 'âœ“'; color: #000; font-size: 10px; font-weight: 900; }
+      .img-wrap.selected .img-check::after { content: '\\2713'; color: #000; font-size: 10px; font-weight: 900; }
       .img-idx {
         position: absolute; bottom: 3px; right: 4px;
         font-size: 9px; font-weight: 700; color: rgba(255,255,255,0.55);
@@ -3068,19 +3068,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     header.className = 'header';
     header.innerHTML = `
       <div class="header-left">
-        <div class="header-icon">ðŸ–¼</div>
+        <div class="header-icon">\uD83D\uDDBC</div>
         <span class="header-title">ZHunter Images</span>
         <span class="header-count" id="zh-img-count">0</span>
       </div>
-      <button class="toggle-btn" id="zh-toggle-btn" title="Minimize">â—€</button>
+      <button class="toggle-btn" id="zh-toggle-btn" title="Minimize">\u25C0</button>
     `;
     panel.appendChild(header);
 
-    // â”€â”€ Body
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Body
     const body = document.createElement('div');
     body.className = 'body';
     body.id = 'zh-img-body';
-    body.innerHTML = `<div class="empty">ðŸ” Scanning imagesâ€¦</div>`;
+    body.innerHTML = `<div class="empty">\uD83D\uDD0D Scanning images...</div>`;
     panel.appendChild(body);
 
     // â”€â”€ Footer
@@ -3089,22 +3089,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     footer.innerHTML = `
       <button class="btn-sm btn-ghost" id="zh-sel-all">All</button>
       <button class="btn-sm btn-ghost" id="zh-sel-none">None</button>
-      <button class="btn-sm btn-dl" id="zh-dl-btn" disabled>â†“ Download</button>
+      <button class="btn-sm btn-dl" id="zh-dl-btn" disabled>\u2193 Download</button>
     `;
     panel.appendChild(footer);
 
-    // â”€â”€ Status bar
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Status bar
     const statusBar = document.createElement('div');
     statusBar.className = 'status-bar';
     statusBar.id = 'zh-status';
     panel.appendChild(statusBar);
 
-    // â”€â”€ State
+    // Ã¢â€â‚¬Ã¢â€â‚¬ State
     let images = [];
     let selected = new Set();
     let collapsed = false;
 
-    // â”€â”€ Toggle collapse
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Toggle collapse
     const toggleBtn = shadow.getElementById('zh-toggle-btn');
     const countEl   = shadow.getElementById('zh-img-count');
     const dlBtn     = shadow.getElementById('zh-dl-btn');
@@ -3114,15 +3114,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (e.target === toggleBtn) return;
       collapsed = !collapsed;
       panel.classList.toggle('collapsed', collapsed);
-      toggleBtn.textContent = collapsed ? 'â–¶' : 'â—€';
+      toggleBtn.textContent = collapsed ? '\u25B6' : '\u25C0';
     });
     toggleBtn.addEventListener('click', () => {
       collapsed = !collapsed;
       panel.classList.toggle('collapsed', collapsed);
-      toggleBtn.textContent = collapsed ? 'â–¶' : 'â—€';
+      toggleBtn.textContent = collapsed ? '\u25B6' : '\u25C0';
     });
 
-    // â”€â”€ Render grid
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Render grid
     function renderGrid() {
       const b = shadow.getElementById('zh-img-body');
       if (!images.length) {
@@ -3157,10 +3157,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     function updateDlBtn() {
       const n = selected.size;
       dlBtn.disabled = n === 0;
-      dlBtn.textContent = n > 0 ? `â†“ Download ${n}` : 'â†“ Download';
+      dlBtn.textContent = n > 0 ? `\u2193 Download ${n}` : '\u2193 Download';
     }
 
-    // â”€â”€ Select All / None
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Select All / None
     shadow.getElementById('zh-sel-all').addEventListener('click', () => {
       images.forEach((_, i) => selected.add(i));
       renderGrid();
@@ -3170,7 +3170,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       renderGrid();
     });
 
-    // â”€â”€ Download Selected
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Download Selected
     dlBtn.addEventListener('click', async () => {
       if (!selected.size) return;
       dlBtn.disabled = true;
@@ -3178,7 +3178,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       let done = 0;
 
       status.className = 'status-bar';
-      status.textContent = `Downloading 0 / ${toDownload.length}â€¦`;
+      status.textContent = `Downloading 0 / ${toDownload.length}...`;
 
       const productSlug = document.title.replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 30);
 
@@ -3189,18 +3189,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         try {
           downloadViaBackground(url, filename);
           done++;
-          status.textContent = `Downloading ${done} / ${toDownload.length}â€¦`;
+          status.textContent = `Downloading ${done} / ${toDownload.length}...`;
           await new Promise(r => setTimeout(r, 400)); // stagger downloads
         } catch (_) {}
       }
 
       status.className = 'status-bar ok';
-      status.textContent = `âœ“ ${done} image${done !== 1 ? 's' : ''} downloaded!`;
+      status.textContent = `\u2713 ${done} image${done !== 1 ? 's' : ''} downloaded!`;
       dlBtn.disabled = false;
       setTimeout(() => { status.textContent = ''; status.className = 'status-bar'; }, 4000);
     });
 
-    // â”€â”€ Load images (with delay for SPAs)
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Load images (with delay for SPAs)
     setTimeout(() => {
       images = collectPageImages();
       selected = new Set(images.map((_, i) => i)); // select all by default
@@ -3216,7 +3216,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }, 1200);
   }
 
-  // â”€â”€ Kick off
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Kick off
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initImagePanel);
   } else {
