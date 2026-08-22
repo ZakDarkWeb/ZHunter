@@ -3037,4 +3037,414 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 })();
 
+// ── ZHunter In-Page Image Panel ──────────────────────────────
+(function () {
+  const PANEL_ID = 'zhunter-img-panel-root';
+  const IMG_PLATFORM_KEYS = [
+    'walmart.com', 'amazon.', 'samsclub.com', 'faire.com', 'aliexpress.',
+    'alibaba.com', 'temu.', 'ebay.', 'etsy.com', 'shein.com', 'daraz.',
+    'worldwidegolfballs.com', 'worldwidegolfshops.com', 'flipkart.com',
+    'noon.com', 'lazada.', 'myshopify.com', 'target.com', 'costco.com',
+    'bestbuy.com', 'homedepot.com'
+  ];
+  const PRODUCT_PATH_PATTERNS = [
+    /\/ip\//,/\/dp\//,/\/gp\/product\//,/\/product\//,/\/itm\//,
+    /\/listing\//,/\/item\//,/\/goods[-_]?(detail)?/,/\/p-/,
+    /\/products?\//,/\/pd\//,/\/skuId=/,/[?&]sku[_-]?id=/i,
+    /\/prd\//,/\/buy\//,/[?&]itemid=/,/\/asin\//
+  ];
+  const NON_PRODUCT_PATTERNS = [
+    /\/search[\/?]/,/\/s\?/,/\/browse\//,/\/category\//,/\/collection/,
+    /\/shop\/?$/,/\/deals\/?/,/\/offers\/?/,/^\/?$/,
+    /\/cart\//,/\/checkout\//,/\/account\//,/\/wishlist\//
+  ];
+
+  const h = host();
+  const path = location.pathname.toLowerCase();
+  const href = location.href.toLowerCase();
+
+  if (!IMG_PLATFORM_KEYS.some(k => h.includes(k))) return;
+  if (NON_PRODUCT_PATTERNS.some(p => p.test(path) || p.test(href))) return;
+  if (!PRODUCT_PATH_PATTERNS.some(p => p.test(path) || p.test(href))) return;
+
+  // ── Image Collector ──────────────────────────────────────────
+  function collectPageImages() {
+    const seen = new Set();
+    const imgs = [];
+
+    const push = (url) => {
+      if (!url || typeof url !== 'string') return;
+      try {
+        const abs = new URL(url, location.href).href;
+        if (seen.has(abs)) return;
+        if (/\.(svg|gif|ico|webp)(\?|$)/i.test(abs) && !/product|item|goods/i.test(abs)) return;
+        if (/logo|icon|badge|sprite|avatar|banner|placeholder/i.test(abs)) return;
+        seen.add(abs);
+        imgs.push(abs);
+      } catch (_) {}
+    };
+
+    // 1. OG image (most reliable first)
+    document.querySelectorAll('meta[property="og:image"], meta[name="og:image"]')
+      .forEach(m => push(m.content));
+
+    // 2. JSON-LD images
+    document.querySelectorAll('script[type="application/ld+json"]').forEach(s => {
+      try {
+        const d = JSON.parse(s.textContent);
+        const extract = o => {
+          if (!o) return;
+          if (Array.isArray(o)) { o.forEach(extract); return; }
+          if (typeof o === 'string') { push(o); return; }
+          if (o.image) extract(o.image);
+          if (o.url && /\.(jpe?g|png|webp)/i.test(o.url)) push(o.url);
+          if (o.contentUrl) push(o.contentUrl);
+        };
+        extract(d);
+      } catch (_) {}
+    });
+
+    // 3. Gallery / product-zone images
+    const gallerySelectors = [
+      '[data-testid*="product-image"] img', '[data-testid*="hero"] img',
+      '.product-image img', '.product__images img', '.product-gallery img',
+      '#imageBlock img', '#altImages img', '.imgTagWrapper img',
+      '[class*="gallery"] img', '[class*="Gallery"] img',
+      '[class*="product"] img', '[class*="Product"] img',
+      '[class*="carousel"] img', '[class*="slider"] img',
+      'img[data-zoom-image]', 'img[data-large-src]',
+      'img[data-src*="product"]', 'img[data-original]',
+      '.swiper-slide img', '.slick-slide img'
+    ];
+    document.querySelectorAll(gallerySelectors.join(', ')).forEach(img => {
+      const src = img.dataset.zoomImage || img.dataset.largeSrc ||
+                  img.dataset.original || img.dataset.src || img.src || '';
+      if (src && img.naturalWidth > 80 && img.naturalHeight > 80) push(src);
+    });
+
+    // 4. Amazon-specific hi-res
+    document.querySelectorAll('[data-a-dynamic-image]').forEach(el => {
+      try {
+        const map = JSON.parse(el.dataset.aDynamicImage || '{}');
+        Object.keys(map).forEach(push);
+      } catch (_) {}
+    });
+
+    return imgs.slice(0, 20);
+  }
+
+  // ── Download helper ──────────────────────────────────────────
+  function downloadViaBackground(url, filename) {
+    chrome.runtime.sendMessage({ action: 'FETCH_BASE64', url }, res => {
+      if (chrome.runtime.lastError || !res?.base64) {
+        // Fallback: direct anchor
+        const a = document.createElement('a');
+        a.href = url; a.download = filename; a.target = '_blank';
+        document.body.appendChild(a); a.click();
+        setTimeout(() => a.remove(), 500);
+        return;
+      }
+      const ext = url.match(/\.(jpe?g|png|webp|gif)/i)?.[1] || 'jpg';
+      const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
+                 : ext === 'png' ? 'image/png'
+                 : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+      const dataUrl = `data:${mime};base64,${res.base64}`;
+      const a = document.createElement('a');
+      a.href = dataUrl; a.download = filename;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => a.remove(), 500);
+    });
+  }
+
+  // ── Init Panel ───────────────────────────────────────────────
+  function initImagePanel() {
+    if (document.getElementById(PANEL_ID)) return;
+
+    const root = document.createElement('div');
+    root.id = PANEL_ID;
+    Object.assign(root.style, {
+      position: 'fixed', top: '80px', right: '0',
+      zIndex: '2147483640', fontFamily: 'sans-serif'
+    });
+    document.documentElement.appendChild(root);
+
+    const shadow = root.attachShadow({ mode: 'open' });
+
+    const style = document.createElement('style');
+    style.textContent = `
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      :host { all: initial; }
+      .panel {
+        width: 300px;
+        background: rgba(6, 10, 22, 0.97);
+        border: 1px solid rgba(0, 229, 255, 0.35);
+        border-right: none;
+        border-radius: 14px 0 0 14px;
+        box-shadow: -4px 0 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0,229,255,0.08);
+        overflow: hidden;
+        transition: transform 0.3s cubic-bezier(0.2,1,0.3,1);
+        font-family: 'Inter', system-ui, sans-serif;
+      }
+      .panel.collapsed { transform: translateX(260px); }
+      .header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 10px 12px;
+        background: linear-gradient(135deg, rgba(0,229,255,0.12), rgba(6,182,212,0.06));
+        border-bottom: 1px solid rgba(0,229,255,0.18);
+        cursor: pointer; user-select: none;
+      }
+      .header-left { display: flex; align-items: center; gap: 8px; }
+      .header-icon {
+        width: 26px; height: 26px;
+        background: linear-gradient(135deg, #00e5ff, #0ea5e9);
+        border-radius: 7px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 13px; flex-shrink: 0;
+        box-shadow: 0 2px 8px rgba(0,229,255,0.4);
+      }
+      .header-title { color: #e0f7fa; font-size: 12px; font-weight: 700; letter-spacing: 0.3px; }
+      .header-count {
+        font-size: 10px; font-weight: 600; padding: 2px 7px;
+        background: rgba(0,229,255,0.15); border: 1px solid rgba(0,229,255,0.3);
+        border-radius: 9999px; color: #67e8f9;
+      }
+      .toggle-btn {
+        background: none; border: none; cursor: pointer;
+        color: #7dd3fc; font-size: 14px; padding: 2px 4px;
+        line-height: 1; border-radius: 5px;
+        transition: background 0.15s, color 0.15s;
+      }
+      .toggle-btn:hover { background: rgba(0,229,255,0.12); color: #00e5ff; }
+      .body { padding: 10px; max-height: 380px; overflow-y: auto; }
+      .body::-webkit-scrollbar { width: 3px; }
+      .body::-webkit-scrollbar-thumb { background: rgba(0,229,255,0.3); border-radius: 3px; }
+      .empty {
+        text-align: center; padding: 24px 12px;
+        color: #3b6a8a; font-size: 11px; line-height: 1.6;
+      }
+      .grid {
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+      }
+      .img-wrap {
+        position: relative; border-radius: 7px; overflow: hidden;
+        border: 2px solid transparent; cursor: pointer;
+        transition: border-color 0.15s, transform 0.15s;
+        aspect-ratio: 1;
+        background: #0a1428;
+      }
+      .img-wrap:hover { border-color: rgba(0,229,255,0.4); transform: scale(1.03); }
+      .img-wrap.selected { border-color: #00e5ff; box-shadow: 0 0 0 1px rgba(0,229,255,0.3); }
+      .img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .img-check {
+        position: absolute; top: 4px; left: 4px;
+        width: 16px; height: 16px; border-radius: 4px;
+        background: rgba(0,0,0,0.6); border: 1.5px solid rgba(255,255,255,0.3);
+        display: flex; align-items: center; justify-content: center;
+        transition: background 0.15s, border-color 0.15s;
+        pointer-events: none;
+      }
+      .img-wrap.selected .img-check {
+        background: #00e5ff; border-color: #00e5ff;
+      }
+      .img-wrap.selected .img-check::after { content: '✓'; color: #000; font-size: 10px; font-weight: 900; }
+      .img-idx {
+        position: absolute; bottom: 3px; right: 4px;
+        font-size: 9px; font-weight: 700; color: rgba(255,255,255,0.55);
+        background: rgba(0,0,0,0.5); padding: 1px 4px; border-radius: 3px;
+      }
+      .footer {
+        padding: 8px 10px;
+        border-top: 1px solid rgba(0,229,255,0.12);
+        display: flex; gap: 6px; align-items: center;
+      }
+      .btn-sm {
+        padding: 5px 9px; border-radius: 6px; font-size: 10px; font-weight: 700;
+        cursor: pointer; border: 1px solid transparent;
+        font-family: inherit; transition: all 0.15s; white-space: nowrap;
+      }
+      .btn-ghost {
+        background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1);
+        color: #7dd3fc;
+      }
+      .btn-ghost:hover { background: rgba(0,229,255,0.1); border-color: rgba(0,229,255,0.3); color: #00e5ff; }
+      .btn-dl {
+        flex: 1; background: linear-gradient(135deg, #00e5ff, #0ea5e9);
+        color: #000; font-weight: 800;
+      }
+      .btn-dl:hover { box-shadow: 0 0 12px rgba(0,229,255,0.4); }
+      .btn-dl:disabled { opacity: 0.35; cursor: not-allowed; }
+      .status-bar {
+        padding: 5px 10px 8px;
+        font-size: 10px; color: #3b6a8a; text-align: center; min-height: 22px;
+      }
+      .status-bar.ok { color: #34d399; }
+      .status-bar.err { color: #f87171; }
+    `;
+    shadow.appendChild(style);
+
+    const panel = document.createElement('div');
+    panel.className = 'panel';
+    shadow.appendChild(panel);
+
+    // ── Header
+    const header = document.createElement('div');
+    header.className = 'header';
+    header.innerHTML = `
+      <div class="header-left">
+        <div class="header-icon">🖼</div>
+        <span class="header-title">ZHunter Images</span>
+        <span class="header-count" id="zh-img-count">0</span>
+      </div>
+      <button class="toggle-btn" id="zh-toggle-btn" title="Minimize">◀</button>
+    `;
+    panel.appendChild(header);
+
+    // ── Body
+    const body = document.createElement('div');
+    body.className = 'body';
+    body.id = 'zh-img-body';
+    body.innerHTML = `<div class="empty">🔍 Scanning images…</div>`;
+    panel.appendChild(body);
+
+    // ── Footer
+    const footer = document.createElement('div');
+    footer.className = 'footer';
+    footer.innerHTML = `
+      <button class="btn-sm btn-ghost" id="zh-sel-all">All</button>
+      <button class="btn-sm btn-ghost" id="zh-sel-none">None</button>
+      <button class="btn-sm btn-dl" id="zh-dl-btn" disabled>↓ Download</button>
+    `;
+    panel.appendChild(footer);
+
+    // ── Status bar
+    const statusBar = document.createElement('div');
+    statusBar.className = 'status-bar';
+    statusBar.id = 'zh-status';
+    panel.appendChild(statusBar);
+
+    // ── State
+    let images = [];
+    let selected = new Set();
+    let collapsed = false;
+
+    // ── Toggle collapse
+    const toggleBtn = shadow.getElementById('zh-toggle-btn');
+    const countEl   = shadow.getElementById('zh-img-count');
+    const dlBtn     = shadow.getElementById('zh-dl-btn');
+    const status    = shadow.getElementById('zh-status');
+
+    header.addEventListener('click', (e) => {
+      if (e.target === toggleBtn) return;
+      collapsed = !collapsed;
+      panel.classList.toggle('collapsed', collapsed);
+      toggleBtn.textContent = collapsed ? '▶' : '◀';
+    });
+    toggleBtn.addEventListener('click', () => {
+      collapsed = !collapsed;
+      panel.classList.toggle('collapsed', collapsed);
+      toggleBtn.textContent = collapsed ? '▶' : '◀';
+    });
+
+    // ── Render grid
+    function renderGrid() {
+      const b = shadow.getElementById('zh-img-body');
+      if (!images.length) {
+        b.innerHTML = `<div class="empty">No product images found<br>on this page.</div>`;
+        return;
+      }
+      countEl.textContent = images.length;
+      const grid = document.createElement('div');
+      grid.className = 'grid';
+      images.forEach((url, i) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'img-wrap' + (selected.has(i) ? ' selected' : '');
+        wrap.innerHTML = `
+          <img src="${url}" loading="lazy" alt="img ${i+1}" title="${url}"
+               onerror="this.style.opacity='0.2';this.src='data:image/svg+xml,<svg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 100 100\\'><text y=\\'.9em\\' font-size=\\'90\\'>\u{1F5BC}</text></svg>'">
+          <div class="img-check"></div>
+          <div class="img-idx">${i + 1}</div>
+        `;
+        wrap.addEventListener('click', () => {
+          if (selected.has(i)) selected.delete(i);
+          else selected.add(i);
+          wrap.classList.toggle('selected', selected.has(i));
+          updateDlBtn();
+        });
+        grid.appendChild(wrap);
+      });
+      b.innerHTML = '';
+      b.appendChild(grid);
+      updateDlBtn();
+    }
+
+    function updateDlBtn() {
+      const n = selected.size;
+      dlBtn.disabled = n === 0;
+      dlBtn.textContent = n > 0 ? `↓ Download ${n}` : '↓ Download';
+    }
+
+    // ── Select All / None
+    shadow.getElementById('zh-sel-all').addEventListener('click', () => {
+      images.forEach((_, i) => selected.add(i));
+      renderGrid();
+    });
+    shadow.getElementById('zh-sel-none').addEventListener('click', () => {
+      selected.clear();
+      renderGrid();
+    });
+
+    // ── Download Selected
+    dlBtn.addEventListener('click', async () => {
+      if (!selected.size) return;
+      dlBtn.disabled = true;
+      const toDownload = [...selected].sort();
+      let done = 0;
+
+      status.className = 'status-bar';
+      status.textContent = `Downloading 0 / ${toDownload.length}…`;
+
+      const productSlug = document.title.replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 30);
+
+      for (const idx of toDownload) {
+        const url = images[idx];
+        const ext = url.match(/\.(jpe?g|png|webp|gif)/i)?.[1] || 'jpg';
+        const filename = `${productSlug}-img${idx + 1}.${ext}`;
+        try {
+          downloadViaBackground(url, filename);
+          done++;
+          status.textContent = `Downloading ${done} / ${toDownload.length}…`;
+          await new Promise(r => setTimeout(r, 400)); // stagger downloads
+        } catch (_) {}
+      }
+
+      status.className = 'status-bar ok';
+      status.textContent = `✓ ${done} image${done !== 1 ? 's' : ''} downloaded!`;
+      dlBtn.disabled = false;
+      setTimeout(() => { status.textContent = ''; status.className = 'status-bar'; }, 4000);
+    });
+
+    // ── Load images (with delay for SPAs)
+    setTimeout(() => {
+      images = collectPageImages();
+      selected = new Set(images.map((_, i) => i)); // select all by default
+      renderGrid();
+      if (images.length === 0) {
+        // Retry once after 2s for slow SPAs
+        setTimeout(() => {
+          images = collectPageImages();
+          selected = new Set(images.map((_, i) => i));
+          renderGrid();
+        }, 2000);
+      }
+    }, 1200);
+  }
+
+  // ── Kick off
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initImagePanel);
+  } else {
+    initImagePanel();
+  }
+})();
+
 } // end __zhunterContentLoaded guard
