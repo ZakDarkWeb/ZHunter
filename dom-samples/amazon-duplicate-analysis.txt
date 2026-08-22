@@ -1,0 +1,61 @@
+=== amazon-sweatpants.html ===
+visible raw= 14 unique= 5
+  https://m.media-amazon.com/images/i/31jmrmq1v3l.jpg variants= 2
+  https://m.media-amazon.com/images/i/31n4o7twoql.jpg variants= 1
+  https://m.media-amazon.com/images/i/31ztbupzutl.jpg variants= 1
+  https://m.media-amazon.com/images/i/51uspzycg5l.jpg variants= 1
+  https://m.media-amazon.com/images/i/61stmmbin4l.jpg variants= 9
+all_script raw= 133 unique= 23
+  https://m.media-amazon.com/images/i/61stmmbin4l.jpg variants= 24
+  https://m.media-amazon.com/images/i/31jmrmq1v3l.jpg variants= 5
+  https://m.media-amazon.com/images/i/51aoe2n3sxl.jpg variants= 8
+  https://m.media-amazon.com/images/i/31n4o7twoql.jpg variants= 1
+  https://m.media-amazon.com/images/i/51q9+vfqpql.jpg variants= 8
+  https://m.media-amazon.com/images/i/31ztbupzutl.jpg variants= 1
+  https://m.media-amazon.com/images/i/71huc68jqpl.jpg variants= 8
+  https://m.media-amazon.com/images/i/51uspzycg5l.jpg variants= 1
+  https://m.media-amazon.com/images/i/31lwux5kpml.jpg variants= 3
+  https://m.media-amazon.com/images/i/31d0owgxj3l.jpg variants= 3
+  https://m.media-amazon.com/images/i/311gqx1obsl.jpg variants= 3
+  https://m.media-amazon.com/images/i/31ttkw8w1il.jpg variants= 3
+  https://m.media-amazon.com/images/i/310yvk0mkkl.jpg variants= 3
+  https://m.media-amazon.com/images/i/31vzefwl9el.jpg variants= 3
+  https://m.media-amazon.com/images/i/31m9icjsvfl.jpg variants= 2
+  https://m.media-amazon.com/images/i/61l65qhpmtl.jpg variants= 8
+  https://m.media-amazon.com/images/i/61xubdavsyl.jpg variants= 8
+  https://m.media-amazon.com/images/i/61jrqvmawvl.jpg variants= 8
+  https://m.media-amazon.com/images/i/616cgegr5pl.jpg variants= 8
+  https://m.media-amazon.com/images/i/612pywmdkil.jpg variants= 8
+
+=== amazon-hydro.html ===
+visible raw= 16 unique= 8
+  https://m.media-amazon.com/images/i/41i8an0ragl.jpg variants= 9
+  https://m.media-amazon.com/images/i/21liynvsvcl.jpg variants= 1
+  https://m.media-amazon.com/images/i/11ju3m-4vil.jpg variants= 1
+  https://m.media-amazon.com/images/i/21g+gxe9m4l.jpg variants= 1
+  https://m.media-amazon.com/images/i/41lvao1b1ol.jpg variants= 1
+  https://m.media-amazon.com/images/i/31gfrr9c5fl.jpg variants= 1
+  https://m.media-amazon.com/images/i/41+ka4c+vel.jpg variants= 1
+  https://m.media-amazon.com/images/i/61mjikjeqml.ss125_pkplay-button-mb-image-grid-small_.jpg variants= 1
+all_script raw= 804 unique= 147
+  https://m.media-amazon.com/images/i/41i8an0ragl.jpg variants= 16
+  https://m.media-amazon.com/images/i/21liynvsvcl.jpg variants= 6
+  https://m.media-amazon.com/images/i/41-pyojz21l.jpg variants= 8
+  https://m.media-amazon.com/images/i/11ju3m-4vil.jpg variants= 2
+  https://m.media-amazon.com/images/i/51zfga89v6l.jpg variants= 8
+  https://m.media-amazon.com/images/i/21g+gxe9m4l.jpg variants= 2
+  https://m.media-amazon.com/images/i/61o3juk4erl.jpg variants= 8
+  https://m.media-amazon.com/images/i/41lvao1b1ol.jpg variants= 2
+  https://m.media-amazon.com/images/i/51srebpsmhl.jpg variants= 8
+  https://m.media-amazon.com/images/i/31gfrr9c5fl.jpg variants= 2
+  https://m.media-amazon.com/images/i/81eprmkvasl.jpg variants= 8
+  https://m.media-amazon.com/images/i/41+ka4c+vel.jpg variants= 2
+  https://m.media-amazon.com/images/i/61mjikjeqml.ss125_pkplay-button-mb-image-grid-small_.jpg variants= 3
+  https://m.media-amazon.com/images/i/41afdpozvsl.jpg variants= 4
+  https://m.media-amazon.com/images/i/41nh+wztttl.jpg variants= 4
+  https://m.media-amazon.com/images/i/21xvfqfobbl.jpg variants= 4
+  https://m.media-amazon.com/images/i/31yr4a9tkol.jpg variants= 4
+  https://m.media-amazon.com/images/i/31otczfnttl.jpg variants= 4
+  https://m.media-amazon.com/images/i/21pggsdv3fl.jpg variants= 4
+  https://m.media-amazon.com/images/i/31scp9jyabl.jpg variants= 4
+

@@ -1,5 +1,5 @@
 // ============================================================
-// ZHunter PRO v7.6.1 - Background Service Worker
+// ZHunter PRO v7.9.15 - Background Service Worker
 // Handles storage operations, messaging, content script orchestration, and AI generation
 // ============================================================
 'use strict';
@@ -9,6 +9,7 @@
 // and cause bulk hunting failures. Pure fetch() works perfectly in MV3.
 
 const STORAGE_KEY   = 'zakLinkCollectorData';
+const PRODUCT_QUEUE_KEY = 'zhunterProductQueue';
 const BADGE_COLOR   = '#06b6d4';
 const SUCCESS_COLOR = '#10b981';
 
@@ -221,7 +222,7 @@ async function _syncToCloud(data) {
       history:    (data.history || []).slice(0, 100),
       settings:   data.settings || {},
       lastSynced: new Date().toISOString(),
-      version:    '7.6.1'
+      version:    chrome.runtime.getManifest().version
     });
 
     const url = `${_FS_BASE}/zhunter_users/${encodeURIComponent(uid)}/data/main?key=${_FS_API_KEY}`;
@@ -324,6 +325,7 @@ const DEFAULT_DATA = {
     aiApiKey:            '',
     bulkFilenamePrefix:  'zhunter_',
     autoSkipDuplicates:  true,
+    cloudSyncEnabled:    false,
     imageFormat:         'jpg',        // 'original' | 'jpg' | 'png'
     bulkSheetColumns: {
       no: true,           title: true,        url: true,
@@ -337,7 +339,16 @@ const DEFAULT_DATA = {
       videoUrl: false,
       weight: false, dimL: false, dimW: false, dimH: false
     },
-    customBulkColumns: []
+    customBulkColumns: [],
+    // Product Queue Sheet: the original four columns stay enabled by default;
+    // optional research fields are opt-in from Settings.
+    productSheetColumns: {
+      folderNumber: true, title: true, link: true, sourcingPrice: true,
+      platform: false, description: false, imageCount: false, videoCount: false,
+      imageLinks: false, videoLinks: false, variants: false, status: false,
+      source: false, createdAt: false
+    },
+    customProductColumns: []
   }
 };
 
@@ -347,7 +358,17 @@ async function getData() {
     const result = await chrome.storage.local.get(STORAGE_KEY);
     const stored = result[STORAGE_KEY];
     if (!stored) return JSON.parse(JSON.stringify(DEFAULT_DATA));
-    const settings = { ...DEFAULT_DATA.settings, ...(stored.settings || {}) };
+    const settings = {
+      ...DEFAULT_DATA.settings,
+      ...(stored.settings || {}),
+      productSheetColumns: {
+        ...DEFAULT_DATA.settings.productSheetColumns,
+        ...(stored.settings?.productSheetColumns || {})
+      },
+      customProductColumns: Array.isArray(stored.settings?.customProductColumns)
+        ? stored.settings.customProductColumns
+        : [...DEFAULT_DATA.settings.customProductColumns]
+    };
     
     // Auto-migrate old defaults to the new "Original" values
     if (!settings.migratedToOriginal_2) {
@@ -375,9 +396,411 @@ async function saveData(data) {
   try {
     await chrome.storage.local.set({ [STORAGE_KEY]: data });
     await updateBadge(data.links.length, data.settings.badgeEnabled);
-    // ☁️ Non-blocking cloud sync (fire-and-forget, debounced)
-    _debouncedSync(data);
+    // Cloud sync is opt-in. The normal free workflow remains local-only.
+    if (data.settings?.cloudSyncEnabled === true) _debouncedSync(data);
   } catch (_) {}
+}
+
+// ── NO-TAB PRODUCT QUEUE ──────────────────────────────────────
+let _queueProcessPromise = null;
+
+function normalizeQueueUrl(raw) {
+  try {
+    const u = new URL(String(raw || '').trim());
+    u.hash = '';
+    for (const key of [...u.searchParams.keys()]) {
+      if (/^(utm_|gclid$|fbclid$|msclkid$|ref$)/i.test(key)) u.searchParams.delete(key);
+    }
+    return u.href;
+  } catch (_) { return ''; }
+}
+
+function normalizeFolderNumber(value) {
+  const n = String(value ?? '').trim().replace(/[^0-9A-Za-z_-]/g, '').slice(0, 20);
+  return n || '1';
+}
+
+function folderLabel(index) {
+  return `Folder ${String(index + 1).padStart(2, '0')}`;
+}
+
+function orderedQueueItems(queue, completeOnly = false) {
+  return (Array.isArray(queue) ? queue : [])
+    .filter(item => !completeOnly || item.status === 'complete')
+    .slice()
+    .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')) || String(a.id || '').localeCompare(String(b.id || '')));
+}
+
+function queueFolderMap(queue) {
+  return new Map(orderedQueueItems(queue).map((item, index) => [item.id, folderLabel(index)]));
+}
+
+async function getProductQueue() {
+  try {
+    const stored = await chrome.storage.local.get(PRODUCT_QUEUE_KEY);
+    return Array.isArray(stored[PRODUCT_QUEUE_KEY]) ? stored[PRODUCT_QUEUE_KEY] : [];
+  } catch (_) { return []; }
+}
+
+async function saveProductQueue(queue) {
+  await chrome.storage.local.set({ [PRODUCT_QUEUE_KEY]: queue.slice(0, 2000) });
+}
+
+async function addProductQueueItems(items) {
+  const queue = await getProductQueue();
+  const known = new Set(queue.map(item => normalizeQueueUrl(item.url)).filter(Boolean));
+  const added = [];
+  const rejected = [];
+
+  let nextFolder = queue.reduce((max, item) => {
+    const match = String(item?.folderNumber || '').match(/\d+/);
+    return Math.max(max, match ? Number(match[0]) : 0);
+  }, 0) + 1;
+  for (const raw of Array.isArray(items) ? items : []) {
+    const url = normalizeQueueUrl(raw?.url || raw);
+    if (!url || !isSupportedProductUrl(url)) {
+      if (raw?.url || raw) rejected.push(String(raw?.url || raw));
+      continue;
+    }
+    if (known.has(url)) continue;
+    const item = {
+      id: `pq_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      url,
+      title: sanitizeText(raw?.title || ''),
+      price: sanitizeText(raw?.price || ''),
+      folderNumber: String(nextFolder++).padStart(2, '0'),
+      status: 'queued',
+      error: '',
+      attempts: 0,
+      platform: '',
+      description: '',
+      images: [],
+      videos: [],
+      variants: [],
+      source: ['context_menu', 'open_tab', 'page_scan', 'current_page'].includes(raw?.source) ? raw.source : 'manual',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    queue.unshift(item);
+    known.add(url);
+    added.push(item);
+  }
+
+  await saveProductQueue(queue);
+  if (added.length) broadcastMessage({ action: 'PRODUCT_QUEUE_UPDATED', added: added.length });
+  return { success: true, added, addedCount: added.length, rejected, total: queue.length };
+}
+
+async function waitForQueueTab(tabId, timeoutMs = 20000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const tab = await new Promise(resolve => chrome.tabs.get(tabId, t => resolve(chrome.runtime.lastError ? null : t)));
+    if (!tab) throw new Error('processing_tab_closed');
+    if (tab.status === 'complete') { await new Promise(r => setTimeout(r, 120)); return tab; }
+    await new Promise(r => setTimeout(r, 300));
+  }
+  throw new Error('page_load_timeout');
+}
+
+async function queueSendMessage(tabId, message, timeoutMs = 15000) {
+  return await new Promise(resolve => {
+    let done = false;
+    const finish = value => { if (!done) { done = true; clearTimeout(timer); resolve(value); } };
+    const timer = setTimeout(() => finish(null), timeoutMs);
+    try {
+      chrome.tabs.sendMessage(tabId, message, response => {
+        if (chrome.runtime.lastError) finish(null);
+        else finish(response || null);
+      });
+    } catch (_) { finish(null); }
+  });
+}
+
+async function requestQueueScrape(tabId) {
+  const tab = await new Promise(resolve => chrome.tabs.get(tabId, t => resolve(chrome.runtime.lastError ? null : t)));
+  if (!tab || !/^https?:\/\//i.test(String(tab.url || ''))) throw new Error('unsupported_processing_url');
+  // The manifest content script normally exists after document_idle. Ask it
+  // directly first; only inject when navigation raced document_idle. The old
+  // PING → inject → PING sequence added avoidable latency to every product.
+  let response = await queueSendMessage(tabId, { action: 'SCRAPE_PAGE' }, 20000);
+  if (response?.success && response.data) return response;
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+    await new Promise(resolve => setTimeout(resolve, 90));
+  } catch (_) { return response; }
+  return await queueSendMessage(tabId, { action: 'SCRAPE_PAGE' }, 20000);
+}
+
+const QUEUE_MAX_ATTEMPTS = 5;
+const QUEUE_RETRY_BASE_MS = 900;
+
+function queueSleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+let _queueUpdateChain = Promise.resolve();
+
+function updateQueueItem(id, patch) {
+  const operation = _queueUpdateChain.then(async () => {
+    const queue = await getProductQueue();
+    const item = queue.find(x => x.id === id);
+    if (!item) return null;
+    Object.assign(item, patch, { updatedAt: new Date().toISOString() });
+    await saveProductQueue(queue);
+    return item;
+  });
+  _queueUpdateChain = operation.catch(() => null);
+  return operation;
+}
+
+const TRANSIENT_QUEUE_TITLE = /^(adding to cart|add to cart|added to cart|loading(?:\.\.\.)?|please wait(?:\.\.\.?)?|checkout|your amazon\.com cart|amazon\.com shopping cart|cart|processing)$/i;
+
+function isTransientQueueTitle(value) {
+  return !String(value || '').trim() || TRANSIENT_QUEUE_TITLE.test(String(value).trim());
+}
+
+function queueFallbackTitle(url) {
+  try {
+    const parsed = new URL(url);
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    const candidate = decodeURIComponent(parts[parts.length - 1] || '').replace(/[-_]+/g, ' ').replace(/\b\d{6,}\b/g, '').trim();
+    return candidate ? candidate.slice(0, 500) : parsed.hostname.replace(/^www\./i, '');
+  } catch (_) { return 'Product'; }
+}
+
+function queueTitle(scrapedTitle, originalTitle, url) {
+  const candidates = [scrapedTitle, originalTitle];
+  for (const candidate of candidates) {
+    const clean = sanitizeText(candidate).trim();
+    if (!isTransientQueueTitle(clean)) return clean;
+  }
+  return queueFallbackTitle(url);
+}
+
+async function reloadQueueTab(tabId) {
+  await new Promise(resolve => {
+    try { chrome.tabs.reload(tabId, {}, () => resolve()); }
+    catch (_) { resolve(); }
+  });
+  await waitForQueueTab(tabId, 25000);
+}
+
+async function scrapeQueueItem(tabId, item, total, processed) {
+  let lastError = 'processing_failed';
+  const firstAttempt = Math.min(QUEUE_MAX_ATTEMPTS, Math.max(1, (item.attempts || 0) + 1));
+
+  for (let attempt = firstAttempt; attempt <= QUEUE_MAX_ATTEMPTS; attempt++) {
+    const status = attempt === 1 ? 'processing' : 'retrying';
+    // Do not serialize a storage write before every item. The completion or
+    // failure write below persists the authoritative state, while this live
+    // status is already sent to the side panel immediately.
+    broadcastMessage({ action: 'PRODUCT_QUEUE_PROGRESS', id: item.id, status, attempt, maxAttempts: QUEUE_MAX_ATTEMPTS, processed, total });
+
+    try {
+      await chrome.tabs.update(tabId, { url: item.url, active: false });
+      await waitForQueueTab(tabId);
+      const response = await requestQueueScrape(tabId);
+      if (!response?.success || !response.data) throw new Error(response?.error || 'scrape_failed');
+
+      // Amazon can briefly expose a transient tab title while its product page
+      // hydrates. Re-scrape once after the page settles instead of saving a
+      // cart/loading title or treating the tab as skipped.
+      if (isTransientQueueTitle(response.data?.title) && /amazon\./i.test(item.url)) {
+        await queueSleep(1500);
+        const settled = await queueSendMessage(tabId, { action: 'SCRAPE_PAGE' }, 20000);
+        if (settled?.success && settled.data) response = settled;
+      }
+      const scraped = response.data || {};
+      const saved = await updateQueueItem(item.id, {
+        title: queueTitle(scraped.title, item.title, item.url),
+        price: sanitizeText(scraped.price || item.price || ''),
+        platform: detectCategory(item.url),
+        description: sanitizeText(scraped.description || scraped.notes || ''),
+        images: Array.isArray(scraped.images) ? scraped.images.filter(isValidURL).slice(0, 15) : [],
+        videos: Array.isArray(scraped.videos) ? scraped.videos.filter(v => typeof v === 'string' && isValidURL(v)).slice(0, 12) : [],
+        variants: Array.isArray(scraped.variants) ? scraped.variants.map(v => typeof v === 'string' ? sanitizeText(v) : sanitizeText(v?.name || v?.value || '')).filter(Boolean).slice(0, 20) : [],
+        status: 'complete',
+        error: '',
+        attempts: attempt
+      });
+      if (!saved) return { success: false, removed: true };
+      broadcastMessage({ action: 'PRODUCT_QUEUE_PROGRESS', id: item.id, status: 'complete', attempt, processed: processed + 1, total });
+      return { success: true };
+    } catch (err) {
+      lastError = sanitizeText(err?.message || 'processing_failed');
+      const hasRetry = attempt < QUEUE_MAX_ATTEMPTS;
+      await updateQueueItem(item.id, {
+        status: hasRetry ? 'retrying' : 'needs_retry',
+        attempts: attempt,
+        error: hasRetry ? `${lastError} — retry ${attempt + 1}/${QUEUE_MAX_ATTEMPTS}` : `${lastError} after ${QUEUE_MAX_ATTEMPTS} attempts`
+      });
+      broadcastMessage({ action: 'PRODUCT_QUEUE_PROGRESS', id: item.id, status: hasRetry ? 'retrying' : 'needs_retry', attempt, maxAttempts: QUEUE_MAX_ATTEMPTS, error: lastError, processed, total });
+      if (!hasRetry) return { success: false, needsRetry: true };
+
+      // The next attempt navigates to the product URL again, so a separate
+      // reload here only caused a duplicate page load and made retries slower.
+      await queueSleep(Math.min(QUEUE_RETRY_BASE_MS * (2 ** (attempt - 1)), 3000));
+    }
+  }
+  return { success: false, needsRetry: true, error: lastError };
+}
+
+async function processProductQueue() {
+  if (_queueProcessPromise) return _queueProcessPromise;
+  _queueProcessPromise = (async () => {
+    const runStartedAt = Date.now();
+    let windowId = null;
+    const workerTabs = [];
+    try {
+      const queue = await getProductQueue();
+      const pending = queue.filter(item => item.status !== 'complete' && item.status !== 'needs_retry');
+      if (!pending.length) {
+        return { success: true, processed: 0, total: queue.length, needsRetry: queue.filter(x => x.status === 'needs_retry').length, durationMs: Date.now() - runStartedAt, workerCount: 0 };
+      }
+
+      // Two hidden tabs provide a practical speed-up without opening dozens of
+      // visible tabs. Each tab has its own navigation/content-script lifecycle.
+      try {
+        const win = await chrome.windows.create({ url: 'about:blank', focused: false, state: 'minimized', type: 'normal' });
+        windowId = win?.id || null;
+        if (win?.tabs?.[0]?.id) workerTabs.push(win.tabs[0].id);
+        if (windowId && workerTabs.length < 2) {
+          const second = await chrome.tabs.create({ windowId, url: 'about:blank', active: false });
+          if (second?.id) workerTabs.push(second.id);
+        }
+      } catch (_) {}
+      if (!workerTabs.length) {
+        const first = await chrome.tabs.create({ url: 'about:blank', active: false });
+        if (first?.id) workerTabs.push(first.id);
+      }
+      if (!workerTabs.length) throw new Error('could_not_create_processing_tab');
+
+      let processed = 0;
+      let cursor = 0;
+      await Promise.all(workerTabs.slice(0, 2).map(async tabId => {
+        while (true) {
+          const index = cursor++;
+          if (index >= pending.length) return;
+          const item = pending[index];
+          const live = (await getProductQueue()).find(x => x.id === item.id);
+          if (!live || live.status === 'complete') continue;
+          const result = await scrapeQueueItem(tabId, live, pending.length, processed);
+          if (result.success) processed++;
+        }
+      }));
+      await _queueUpdateChain;
+      const finalQueue = await getProductQueue();
+      const durationMs = Date.now() - runStartedAt;
+      return {
+        success: true,
+        processed,
+        total: finalQueue.length,
+        needsRetry: finalQueue.filter(x => x.status === 'needs_retry').length,
+        durationMs,
+        workerCount: Math.min(2, workerTabs.length),
+        averageMs: processed ? Math.round(durationMs / processed) : 0
+      };
+    } finally {
+      if (windowId) { try { await chrome.windows.remove(windowId); } catch (_) {} }
+      else {
+        for (const tabId of workerTabs) { try { await chrome.tabs.remove(tabId); } catch (_) {} }
+      }
+    }
+  })();
+  try { return await _queueProcessPromise; }
+  finally { _queueProcessPromise = null; }
+}
+
+function freeResearchScore(item) {
+  let score = 0;
+  if (item.title) score += 20;
+  if (item.price) score += 20;
+  if (item.url) score += 10;
+  if (item.images?.length) score += 20;
+  if (item.videos?.length) score += 10;
+  if (item.variants?.length) score += 10;
+  if (item.description) score += 10;
+  return score;
+}
+
+async function getProductSheetRows() {
+  const data = await getData();
+  const allQueue = await getProductQueue();
+  const queue = orderedQueueItems(allQueue, true);
+  const folders = queueFolderMap(allQueue);
+  const customColumns = Array.isArray(data.settings?.customProductColumns) ? data.settings.customProductColumns : [];
+  return queue.map(item => {
+    const imageLinks = Array.isArray(item.images) ? item.images.filter(isValidURL).slice(0, 15) : [];
+    const videoLinks = Array.isArray(item.videos) ? item.videos.filter(isValidURL).slice(0, 12) : [];
+    const row = {
+      'Folder Number': folders.get(item.id) || 'Folder 01',
+      'Product Title': item.title || '',
+      'Link': item.url || '',
+      'Sourcing Price': item.price || '',
+      'Platform': item.platform || detectCategory(item.url),
+      'Description': item.description || '',
+      'Image Count': imageLinks.length,
+      'Video Count': videoLinks.length,
+      'Image Links': imageLinks.join('\\n'),
+      'Video Links': videoLinks.join('\\n'),
+      'Variants': Array.isArray(item.variants) ? item.variants.join('\\n') : '',
+      'Status': item.status || 'complete',
+      'Source': item.source || '',
+      'Date Added': item.createdAt || ''
+    };
+    customColumns.forEach(column => { if (column?.key) row[column.key] = ''; });
+    return row;
+  });
+}
+
+async function getProductResearchWorkbook() {
+  const queue = await getProductQueue();
+  const ordered = orderedQueueItems(queue);
+  const folderById = queueFolderMap(queue);
+  const products = ordered.map(item => ({
+    'Folder Number': folderById.get(item.id) || 'Folder 01',
+    'Product Title': item.title || '',
+    'Link': item.url || '',
+    'Sourcing Price': item.price || '',
+    'Platform': item.platform || detectCategory(item.url),
+    'Status': item.status || 'queued',
+    'Images': Array.isArray(item.images) ? item.images.length : 0,
+    'Videos': Array.isArray(item.videos) ? item.videos.length : 0,
+    'Variants': Array.isArray(item.variants) ? item.variants.length : 0,
+    'Research Score': freeResearchScore(item),
+    'Description': item.description || '',
+    'Last Updated': item.updatedAt || ''
+  }));
+  const media = [];
+  queue.forEach(item => {
+    (item.images || []).forEach((url, index) => media.push({
+      'Product Title': item.title || '', 'Link': item.url || '', 'Media Type': 'Image',
+      'Position': index + 1, 'Media URL': url, 'Status': item.status || 'queued'
+    }));
+    (item.videos || []).forEach((url, index) => media.push({
+      'Product Title': item.title || '', 'Link': item.url || '', 'Media Type': 'Video',
+      'Position': index + 1, 'Media URL': url, 'Status': item.status || 'queued'
+    }));
+  });
+  const costing = ordered.map(item => ({
+    'Folder Number': folderById.get(item.id) || 'Folder 01',
+    'Product Title': item.title || '',
+    'Sourcing Price': item.price || '',
+    'Selling Price': '',
+    'Shipping Cost': '',
+    'Fees %': '',
+    'Landed Cost': '',
+    'Profit': '',
+    'Margin %': '',
+    'ROI %': ''
+  }));
+  const errors = ordered.filter(item => item.status !== 'complete').map(item => ({
+    'Folder Number': folderById.get(item.id) || 'Folder 01',
+    'Product Title': item.title || '',
+    'Link': item.url || '',
+    'Status': item.status || 'queued',
+    'Attempts': item.attempts || 0,
+    'Last Error': item.error || ''
+  }));
+  return { products, media, costing, errors };
 }
 
 async function mutateLink(id, mutator) {
@@ -457,6 +880,32 @@ function generateId() {
 function isValidURL(str) {
   try { const { protocol } = new URL(str); return protocol === 'http:' || protocol === 'https:'; }
   catch (_) { return false; }
+}
+
+// Product-only workflow allowlist. General link saving remains available through
+// the normal ADD_LINK path, but queue/context-menu product actions use this list
+// so search engines and unrelated sites are never added to the hunt queue.
+const PRODUCT_HOST_PATTERNS = [
+  'amazon.com', 'amazon.co.uk', 'amazon.ca', 'amazon.de', 'amazon.fr', 'amazon.it',
+  'amazon.es', 'amazon.co.jp', 'amazon.in', 'amazon.com.au', 'amazon.com.mx',
+  'amazon.nl', 'amazon.pl', 'amazon.se', 'amazon.sg', 'amazon.ae', 'amazon.sa',
+  'amazon.tr', 'amazon.eg', 'amazon.be', 'walmart.com', 'samsclub.com',
+  'faire.com', 'alibaba.com', 'aliexpress.com', 'aliexpress.ru', 'temu.com',
+  'ebay.com', 'ebay.co.uk', 'ebay.de', 'ebay.ca', 'ebay.com.au', 'ebay.fr',
+  'ebay.it', 'ebay.es', 'etsy.com', 'daraz.pk', 'daraz.com.bd', 'daraz.lk',
+  'daraz.com.np', 'daraz.ph', 'daraz.my', 'flipkart.com', 'noon.com', 'shein.com',
+  'target.com', 'costco.com', 'homedepot.com', 'bestbuy.com',
+  'worldwidegolfballs.com', 'worldwidegolfshops.com', 'worldgolfshop.com',
+  'golf.com', 'rockbottomgolf.com'
+];
+
+function isSupportedProductUrl(str) {
+  try {
+    const u = new URL(str);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+    const h = u.hostname.toLowerCase().replace(/^www\./, '');
+    return PRODUCT_HOST_PATTERNS.some(pattern => h === pattern || h.endsWith('.' + pattern));
+  } catch (_) { return false; }
 }
 
 function sanitizeText(str) {
@@ -1051,10 +1500,10 @@ async function saveAllTabs(folder = 'General', tags = []) {
 // ── Context menus ────────────────────────────────────────────
 function setupContextMenus() {
   chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({ id: 'zh-save-page',      title: '📄 Save Page — ZHunter',              contexts: ['page'] });
-    chrome.contextMenus.create({ id: 'zh-save-link',      title: '🔗 Save This Link — ZHunter',         contexts: ['link'] });
-    chrome.contextMenus.create({ id: 'zh-save-selection', title: '📎 Save Selected URL — ZHunter',      contexts: ['selection'] });
-    chrome.contextMenus.create({ id: 'zh-hunt-product',   title: '🛍️ Hunt This Product (AI) — ZHunter', contexts: ['page', 'link'] });
+    chrome.contextMenus.create({ id: 'zh-save-page',      title: '📄 Add Product Page to Queue — ZHunter',     contexts: ['page'] });
+    chrome.contextMenus.create({ id: 'zh-save-link',      title: '🔗 Add Product Link to Queue — ZHunter',     contexts: ['link'] });
+    chrome.contextMenus.create({ id: 'zh-save-selection', title: '📎 Add Selected Product URL — ZHunter',     contexts: ['selection'] });
+    chrome.contextMenus.create({ id: 'zh-hunt-product',   title: '🛍️ Add Product to Queue — ZHunter',          contexts: ['page', 'link'] });
     // NEW: Reverse Image Search
     chrome.contextMenus.create({ id: 'zh-reverse-image',  title: '🔍 Find Supplier (AliExpress/Temu)',  contexts: ['image'] });
   });
@@ -1119,27 +1568,56 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 
   if (!url) return;
-  const result = await withWriteLock(() => addLink({ url, title, folder: 'General', images, imageUrls }));
-  if (result.success) {
+  if (!isSupportedProductUrl(url)) {
+    broadcastToast('Only supported shopping-product links can be added to the queue.', 'warn');
+    return;
+  }
+  const result = await withWriteLock(() => addProductQueueItems([{
+    url,
+    title,
+    source: 'context_menu'
+  }]));
+  if (result.success && result.addedCount) {
     await flashBadgeSuccess();
-    broadcastMessage({ action: 'LINK_ADDED', link: result.link });
-  } else if (result.reason === 'duplicate') {
-    broadcastToast('Link already saved', 'warn');
+    broadcastToast('Product added to queue. Open the Product Queue tab to process it.', 'ok');
+  } else if (result.success && !result.addedCount) {
+    broadcastToast('Product is already in the queue.', 'warn');
   }
 });
 
 // ── MESSAGE ROUTER ───────────────────────────────────────────
-// FIX: Added rate limiting to prevent DoS from malicious page content scripts.
+// Rate limiting alone is not enough: explicitly distinguish extension-page
+// requests from the small set of actions allowed to page content scripts.
+const CONTENT_SCRIPT_ACTIONS = new Set([
+  'ADD_PRODUCT_QUEUE', 'DOWNLOAD_PAGE_IMAGES', 'FETCH_BASE64',
+  'FETCH_BASE64_BATCH', 'GET_PENDING_IMAGE_HUNT'
+]);
+
+function isAuthorizedMessage(msg, sender) {
+  if (!msg || typeof msg.action !== 'string' || msg.action.length > 80) return false;
+  if (sender?.id && sender.id !== chrome.runtime.id) return false;
+  if (sender?.tab) {
+    const tabUrl = String(sender.tab.url || '');
+    return /^https?:\/\//i.test(tabUrl) && CONTENT_SCRIPT_ACTIONS.has(msg.action);
+  }
+  // Messages from sidepanel, popup, options, or the service worker itself.
+  return !sender?.url || sender.url.startsWith(`chrome-extension://${chrome.runtime.id}/`);
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!isAuthorizedMessage(msg, sender)) {
+    sendResponse({ success: false, error: 'unauthorized_message' });
+    return true;
+  }
   if (isRateLimited(sender)) {
     sendResponse({ success: false, error: 'rate_limited' });
     return true;
   }
-  handleMessage(msg).then(sendResponse).catch(err => sendResponse({ success: false, error: err.message }));
+  handleMessage(msg, sender).then(sendResponse).catch(err => sendResponse({ success: false, error: err.message }));
   return true;
 });
 
-async function handleMessage(msg) {
+async function handleMessage(msg, sender) {
   switch (msg.action) {
     // ── Read-only / non-storage actions (no lock needed) ─────
     case 'GET_DATA':           return await getData();
@@ -1163,6 +1641,37 @@ async function handleMessage(msg) {
       const urls = Array.isArray(msg.urls) ? msg.urls.slice(0, 15) : [];
       const results = await mapPool(urls, FETCH_CONCURRENCY, u => fetchImageAsBase64(u, settings));
       return { success: true, results: results || [] };
+    }
+    case 'DOWNLOAD_PAGE_IMAGES': {
+      const settings = (await getData())?.settings || {};
+      const urls = Array.isArray(msg.urls) ? [...new Set(msg.urls.filter(isValidURL))].slice(0, 7) : [];
+      const rawName = sanitizeText(msg.title || 'product-images').replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 70) || 'product-images';
+      const downloadOne = (url, filename) => new Promise(resolve => {
+        try {
+          chrome.downloads.download({ url, filename, saveAs: false, conflictAction: 'uniquify' }, downloadId => {
+            const error = chrome.runtime.lastError?.message || '';
+            resolve(error || !downloadId ? { success: false, error: error || 'download_not_started' } : { success: true, downloadId });
+          });
+        } catch (err) { resolve({ success: false, error: err?.message || 'download_error' }); }
+      });
+      const downloadResults = await Promise.all(urls.map(async (url, index) => {
+        const match = url.match(/\.(png|webp|gif|jpeg|jpg)(?:[?#]|$)/i);
+        const directExt = (match?.[1] || 'jpg').toLowerCase().replace('jpeg', 'jpg');
+        const directName = `ZHunter/${rawName}/${String(index + 1).padStart(2, '0')}.${directExt}`;
+        const direct = await downloadOne(url, directName);
+        if (direct.success) return { ...direct, url };
+
+        // Some marketplace CDNs reject a direct downloads request. In that case,
+        // fetch once through the existing extension worker and retry with a data URL.
+        const fetched = await fetchImageAsBase64(url, settings);
+        if (!fetched?.success || typeof fetched.base64 !== 'string') return { success: false, url, error: direct.error || 'image_fetch_failed' };
+        const fallbackExt = fetched.base64.startsWith('data:image/png') ? 'png' : fetched.base64.startsWith('data:image/webp') ? 'webp' : 'jpg';
+        const fallback = await downloadOne(fetched.base64, `ZHunter/${rawName}/${String(index + 1).padStart(2, '0')}.${fallbackExt}`);
+        return { ...fallback, url };
+      }));
+      const started = downloadResults.filter(result => result?.success).length;
+      const failed = downloadResults.filter(result => !result?.success).length;
+      return { success: started > 0, requested: urls.length, started, failed, errors: downloadResults.filter(result => !result?.success).map(result => result.error).slice(0, 7), failedUrls: downloadResults.filter(result => !result?.success).map(result => result.url).filter(Boolean).slice(0, 7) };
     }
     // FIX: Security — never accept apiKey from the message payload.
     // Content scripts or malicious pages could send forged GENERATE_AI messages
@@ -1190,6 +1699,56 @@ async function handleMessage(msg) {
       const d = await getData();
       return { success: true, settings: d.settings };
     }
+    case 'GET_PRODUCT_QUEUE':
+      return { success: true, queue: await getProductQueue() };
+    case 'GET_PRODUCT_SHEET_ROWS': {
+      const sheetData = await getData();
+      return {
+        success: true,
+        rows: await getProductSheetRows(),
+        settings: {
+          productSheetColumns: sheetData.settings?.productSheetColumns || DEFAULT_DATA.settings.productSheetColumns,
+          customProductColumns: Array.isArray(sheetData.settings?.customProductColumns) ? sheetData.settings.customProductColumns : []
+        }
+      };
+    }
+    case 'GET_PRODUCT_RESEARCH_WORKBOOK':
+      return { success: true, workbook: await getProductResearchWorkbook() };
+    case 'ADD_PRODUCT_QUEUE':
+      return await withWriteLock(() => addProductQueueItems(msg.items || []));
+    case 'PROCESS_PRODUCT_QUEUE': {
+      if (!_queueProcessPromise) {
+        startKeepAlive();
+        processProductQueue()
+          .then(result => broadcastMessage({ action: 'PRODUCT_QUEUE_DONE', ...result }))
+          .catch(err => broadcastMessage({ action: 'PRODUCT_QUEUE_DONE', success: false, error: err?.message || 'queue_failed' }))
+          .finally(() => stopKeepAlive());
+      }
+      return { success: true, started: true };
+    }
+    case 'RETRY_PRODUCT_QUEUE':
+      return await withWriteLock(async () => {
+        const queue = await getProductQueue();
+        let reset = 0;
+        queue.forEach(item => {
+          if (item.status === 'needs_retry' || item.status === 'error') {
+            item.status = 'queued';
+            item.attempts = 0;
+            item.error = '';
+            item.updatedAt = new Date().toISOString();
+            reset++;
+          }
+        });
+        await saveProductQueue(queue);
+        if (reset) broadcastMessage({ action: 'PRODUCT_QUEUE_UPDATED', added: 0, reset });
+        return { success: true, reset, total: queue.length };
+      });
+    case 'CLEAR_PRODUCT_QUEUE':
+      return await withWriteLock(async () => {
+        await saveProductQueue([]);
+        broadcastMessage({ action: 'PRODUCT_QUEUE_UPDATED', added: 0 });
+        return { success: true };
+      });
     case 'COPY_ALL_TABS': {
       const tabs = await chrome.tabs.query({});
       const urls = tabs.filter(t => t.url && isValidURL(t.url)).map(t => t.url);
@@ -1398,6 +1957,14 @@ chrome.runtime.onInstalled.addListener(async () => {
     });
     if (!data.settings.bulkSheetColumns) {
       data.settings.bulkSheetColumns = JSON.parse(JSON.stringify(DEFAULT_DATA.settings.bulkSheetColumns));
+      migrated = true;
+    }
+    if (!data.settings.productSheetColumns) {
+      data.settings.productSheetColumns = JSON.parse(JSON.stringify(DEFAULT_DATA.settings.productSheetColumns));
+      migrated = true;
+    }
+    if (!Array.isArray(data.settings.customProductColumns)) {
+      data.settings.customProductColumns = [];
       migrated = true;
     }
     if (typeof data.settings.autoSkipDuplicates === 'undefined') {

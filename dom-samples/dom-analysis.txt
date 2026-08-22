@@ -1,0 +1,60 @@
+=== amazon-hydro.html ===
+bytes 1081516 title Amazon.com | HydroJug Traveler 40oz, Insulated Tumbler with Handle & Straw, Pink Sand | Triple wall insulated, flip straw lid, leak-resistant, stainless steel, cup holder friendly, BPA-free, dishwasher safe: Tumblers & Water Glasses
+images 94 scripts 193 jsonld 0
+selector #landingImage 1
+selector #imgTagWrapperId img 1
+selector #altImages img 7
+selector [data-a-dynamic-image] 7
+image attrs {'src': 93, 'data-old-hires': 1}
+sample src //fls-na.amazon.com/1/batch/1/OP/ATVPDKIKX0DER:133-6687240-5411402:AZAVTP8XXTPB27NK45BS$uedata=s:%2Frd%2Fuedata%3Fstaticb%26id%3DAZAVTP8XXTPB27NK45BS:0
+sample src https://m.media-amazon.com/images/G/01/gno/sprites/nav-sprite-global-1x-reorg-privacy._CB779528203_.png
+sample src https://m.media-amazon.com/images/G/01/digital/video/merch/Other/WNBA_S1_SWM_700x78_POST_Final_noLocale_PV00084436_GraphicalCountdown._CB755568378_.gif
+sample src https://m.media-amazon.com/images/I/41CIkBeq9kL.jpg
+sample src https://m.media-amazon.com/images/G/01/marketing/prime/2022PrimeBrand/Logos/Prime_Logo_RGB_Prime_Blue_MASTER._CB542735979_.png
+sample src https://m.media-amazon.com/images/G/01/siocLanding/icon-sustainability-20-black-2x.png
+sample src https://m.media-amazon.com/images/I/41I8AN0RAgL._AC_SY300_SX300_QL70_ML2_.jpg
+sample data-old-hires https://m.media-amazon.com/images/I/41I8AN0RAgL._AC_SL1500_.jpg
+sample src https://images-na.ssl-images-amazon.com/images/G/01/x-locale/common/grey-pixel.gif
+sample src https://m.media-amazon.com/images/I/21lIynVSvcL._AC_US100_.jpg
+sample src https://m.media-amazon.com/images/I/11JU3m-4VIL._AC_US100_.jpg
+sample src https://m.media-amazon.com/images/I/21G+gxe9M4L._AC_US100_.jpg
+marker imageurl 3
+marker media 1209
+marker lazy 9
+
+=== amazon-sweatpants.html ===
+bytes 867544 title Amazon.com: Watonic Black Women's Barrel Sweatpants 2026 Baggy Wide Leg Track Pants M | Drawstring Elastic Waisted Joggers Lounge Travel Plus Pant with Pockets,2026 Fall Winter Trendy Flowy Workout Sweatpant : Clothing, Shoes & Jewelry
+images 30 scripts 163 jsonld 0
+selector #landingImage 1
+selector #imgTagWrapperId img 1
+selector #altImages img 5
+selector [data-a-dynamic-image] 5
+image attrs {'src': 30, 'data-old-hires': 1}
+sample src //fls-na.amazon.com/1/batch/1/OP/ATVPDKIKX0DER:144-1215272-4843434:NMQZ4WGPB3NGNVC3SB7J$uedata=s:%2Frd%2Fuedata%3Fstaticb%26id%3DNMQZ4WGPB3NGNVC3SB7J:0
+sample src https://m.media-amazon.com/images/G/01/gno/sprites/nav-sprite-global-1x-reorg-privacy._CB779528203_.png
+sample src https://m.media-amazon.com/images/G/01/digital/video/merch/Other/WNBA_S1_SWM_700x78_POST_Final_noLocale_PV00084436_GraphicalCountdown._CB755568378_.gif
+sample src https://m.media-amazon.com/images/G/01/nav2/images/gui/amazon-fashion-store-new._CB485923950_.png
+sample src https://m.media-amazon.com/images/I/31JMrMq1v3L._AC_SR38,50_.jpg
+sample src https://m.media-amazon.com/images/I/31N4o7twOQL._AC_SR38,50_.jpg
+sample src https://m.media-amazon.com/images/I/31ztBUpzUtL._AC_SR38,50_.jpg
+sample src https://m.media-amazon.com/images/I/31JMrMq1v3L._AC_SR38,50_.jpg
+sample src https://m.media-amazon.com/images/I/51UsPzYCG5L._AC_SR38,50_.jpg
+sample src https://m.media-amazon.com/images/I/61stmMBIN4L._AC_SX342_SY445_QL70_ML2_.jpg
+sample data-old-hires https://m.media-amazon.com/images/I/61stmMBIN4L._AC_SL1500_.jpg
+sample src https://m.media-amazon.com/images/S/sash//GN8m8-lU2_Dj38v.svg
+marker imageurl 3
+marker media 444
+marker lazy 10
+
+=== samsclub.html ===
+bytes 16078 title Let us know you're not a robot - Sam's Club
+images 0 scripts 4 jsonld 0
+image attrs {}
+marker media 3
+
+=== walmart.html ===
+bytes 15190 title Robot or human?
+images 0 scripts 6 jsonld 0
+image attrs {}
+marker media 11
+
