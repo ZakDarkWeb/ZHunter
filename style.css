@@ -1568,7 +1568,7 @@ body.light-mode .btn-danger:hover {
   right: 4px;
 }
 
-/* â”€â”€ Empty State â€” IMPROVED: floating animation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* -- Empty State - IMPROVED: floating animation ---------------- */
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -1835,7 +1835,7 @@ body.light-mode .btn-danger:hover {
   flex-shrink: 0;
 }
 
-/* â”€â”€ Folders Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* -- Folders Tab --------------------------------------------- */
 .sec-header {
   display: flex;
   align-items: center;
