@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ZHunter PRO",
-  "version": "8.3.5",
+  "version": "8.1.1",
   "description": "Product research side panel: hunt product images, videos and details from Amazon, Walmart, Sam's Club, Alibaba, AliExpress and more; bulk-hunt open tabs or a background queue; export XLSX/CSV/HTML/PDF sheets and image ZIPs.",
   "author": "ZHunter",
   "permissions": [
@@ -63,7 +63,10 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["icon16.png", "icon32.png", "icon48.png", "icon128.png"],
+      "resources": [
+        "icon16.png", "icon32.png", "icon48.png", "icon128.png",
+        "image-classifier.js", "export-engine.js", "queue-engine.js"
+      ],
       "matches": ["http://*/*", "https://*/*"]
     }
   ],

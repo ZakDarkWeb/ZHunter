@@ -1,7 +1,7 @@
 // ============================================================
-// ZHunter PRO v8.3.4 — Side Panel Controller
-// Fixes: API key removed, async tag race fixed, video support,
-//        clipboard guard, Daraz/Shein scrapers
+// ZHunter PRO v8.1.1 — Side Panel Controller
+// v9: image role badges, quality scores, role filters,
+//     Research Workbook export, queue-engine module
 // ============================================================
 'use strict';
 
@@ -173,6 +173,9 @@ function makeBtn(className, title, svgHTML) {
   return btn;
 }
 
+// MIRRORED: detectCat / isValidURL / getFav are intentionally repeated from background.js.
+// Extension pages and service workers run in separate contexts \u2014 no shared module without a bundler.
+// Keep logic in sync with background.js if either copy changes.
 function detectCat(url) {
   try {
     const h = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
@@ -3320,6 +3323,16 @@ function initBulkTab() {
     else toast('Clipboard export is not available in this build.', 'warn');
   });
   $('masterDlPdfBtn')?.addEventListener('click', () => downloadMasterSheet('pdf'));
+  // v9: Research Workbook
+  $('masterDlWorkbookBtn')?.addEventListener('click', () => {
+    if (typeof ZHExport === 'undefined') { toast('Export engine not loaded', 'err'); return; }
+    const data  = State.data || {};
+    const rows  = data.links || [];
+    if (!rows.length) { toast('No products to export', 'warn'); return; }
+    const prefix = data.settings?.bulkFilenamePrefix || 'zhunter_';
+    ZHExport.downloadResearchWorkbook(rows, [], prefix + 'research_workbook');
+    toast(`Research Workbook downloaded (${rows.length} products)`, 'ok');
+  });
   $('masterResetBtn')?.addEventListener('click', resetMasterSheet);
   $('masterImportBtn')?.addEventListener('click', () => $('masterImportFile')?.click());
   $('masterImportFile')?.addEventListener('change', e => {
@@ -3361,6 +3374,17 @@ function initBulkTab() {
   $('queueExportHtmlBtn')?.addEventListener('click', downloadBatchHtmlCatalog);
   $('queueExportPdfBtn')?.addEventListener('click', downloadQueuePdf);
   $('queueExportZipBtn')?.addEventListener('click', downloadBatchZip);
+  // v9: Research Workbook from queue
+  $('queueExportWorkbookBtn')?.addEventListener('click', () => {
+    if (typeof ZHExport === 'undefined') { toast('Export engine not loaded', 'err'); return; }
+    const items    = (QueueState?.items || []);
+    const done     = items.filter(i => i.hunted || i.status === 'complete');
+    const failed   = items.filter(i => i.status === 'needs_retry' || i.status === 'error');
+    const products = done.map(i => i.result || i).filter(Boolean);
+    if (!products.length) { toast('No completed items to export', 'warn'); return; }
+    ZHExport.downloadResearchWorkbook(products, failed, 'zhunter_queue_workbook');
+    toast(`Research Workbook downloaded (${products.length} products)`, 'ok');
+  });
   $('queueAutoCaptureToggle')?.addEventListener('change', e => msg({ action: 'GET_DATA' }).then(d => {
     const settings = d?.settings || {};
     settings.bulkQueueAutoCapture = e.target.checked;
@@ -5113,11 +5137,12 @@ async function updateMasterStats() {
   updateHeaderCount();
   const dlEnabled = rows.length > 0;
   $('masterDlXlsxBtn').disabled = !dlEnabled;
-  if ($('masterDlCsvBtn'))  $('masterDlCsvBtn').disabled  = !dlEnabled;
-  if ($('masterDlHtmlBtn')) $('masterDlHtmlBtn').disabled = !dlEnabled;
-  if ($('masterCopyTsvBtn')) $('masterCopyTsvBtn').disabled = !dlEnabled;
-  if ($('masterDlPdfBtn'))  $('masterDlPdfBtn').disabled  = !dlEnabled;
-  if ($('masterDlZipBtn'))  $('masterDlZipBtn').disabled  = !dlEnabled;
+  if ($('masterDlCsvBtn'))       $('masterDlCsvBtn').disabled       = !dlEnabled;
+  if ($('masterDlHtmlBtn'))      $('masterDlHtmlBtn').disabled      = !dlEnabled;
+  if ($('masterCopyTsvBtn'))     $('masterCopyTsvBtn').disabled     = !dlEnabled;
+  if ($('masterDlPdfBtn'))       $('masterDlPdfBtn').disabled       = !dlEnabled;
+  if ($('masterDlZipBtn'))       $('masterDlZipBtn').disabled       = !dlEnabled;
+  if ($('masterDlWorkbookBtn'))  $('masterDlWorkbookBtn').disabled  = !dlEnabled; // v9
 
   $('masterWarning')?.classList.toggle('hidden', rows.length < 200);
 
@@ -5155,9 +5180,19 @@ function renderMasterRows(rows) {
     row.className = 'master-row' + (sel ? ' selected' : '') + ' status-' + status;
     row.dataset.id = r.id;
 
+    // v8.1.1: Get first image for thumbnail
+    const thumbSrc = (() => {
+      const imgs = r.imageUrls || r.images || [];
+      if (!imgs.length) return '';
+      const first = imgs[0];
+      return typeof first === 'string' ? first : (first?.src || first?.url || '');
+    })();
+
     row.innerHTML = `
       <div class="master-row-check"></div>
-      <span class="master-row-platform">${esc(platTag)}</span>
+      ${thumbSrc
+        ? `<div class="master-row-thumb"><img src="${esc(thumbSrc)}" alt="" loading="lazy" onerror="this.parentElement.classList.add('thumb-err')"/></div>`
+        : `<span class="master-row-platform">${esc(platTag)}</span>`}
       <div class="master-row-info">
         <div class="master-row-title">${esc(trunc(r.title || '(untitled)', 50))}</div>
         <div class="master-row-meta">
@@ -5247,9 +5282,43 @@ function renderBulkColumnsGrid() {
   const grid = $('bulkColumnsGrid');
   if (!grid) return;
   const prefs = State.data?.settings?.bulkSheetColumns || {};
+  const hasSaved = Object.keys(prefs).length > 0;
+
+  // Add "Reset to default" button at top if not already there
+  let resetBtn = document.getElementById('bulkColsResetBtn');
+  if (!resetBtn) {
+    resetBtn = document.createElement('button');
+    resetBtn.id = 'bulkColsResetBtn';
+    resetBtn.type = 'button';
+    resetBtn.className = 'btn btn-ghost btn-xs';
+    resetBtn.style.cssText = 'margin-bottom:8px;font-size:11px;opacity:.7';
+    resetBtn.textContent = '↺ Reset to default';
+    resetBtn.addEventListener('click', async () => {
+      const defaults = { no: true, title: true, url: true, platform: true, price: true,
+        labelCost: false, listPrice: false, profit: false, description: false,
+        tags: false, variants: false, imageCount: false, videoCount: false,
+        scrapedAt: false, status: false, videoUrl: false,
+        weight: false, dimL: false, dimW: false, dimH: false,
+        img1:false,img2:false,img3:false,img4:false,img5:false,
+        img6:false,img7:false,img8:false,img9:false,img10:false };
+      const updated = await msg({ action: 'UPDATE_SETTINGS', settings: { bulkSheetColumns: defaults } });
+      if (updated?.success) {
+        State.data.settings.bulkSheetColumns = defaults;
+        renderBulkColumnsGrid();
+      }
+    });
+    grid.parentElement.insertBefore(resetBtn, grid);
+  }
+
   grid.innerHTML = '';
   ALL_BULK_COLS.forEach(col => {
-    const checked = prefs[col.key] !== false;
+    // Use saved pref if it exists, otherwise fall back to DEFAULT_ON_COLS
+    let checked;
+    if (hasSaved && prefs[col.key] !== undefined) {
+      checked = prefs[col.key] === true;
+    } else {
+      checked = DEFAULT_ON_COLS.has(col.key);
+    }
     const item = document.createElement('label');
     item.className = 'bulk-col-toggle' + (checked ? ' on' : '');
     item.innerHTML = `
@@ -5258,8 +5327,7 @@ function renderBulkColumnsGrid() {
     item.addEventListener('click', async (e) => {
       e.preventDefault();
       const newPrefs = { ...prefs };
-      newPrefs[col.key] = !(newPrefs[col.key] !== false); // flip
-      // Persist
+      newPrefs[col.key] = !checked;
       const updated = await msg({
         action: 'UPDATE_SETTINGS',
         settings: { bulkSheetColumns: newPrefs }
@@ -5473,17 +5541,16 @@ const ALL_BULK_COLS = [
 ];
 
 // Columns that are OFF by default (must be explicitly enabled by user)
-// Default sheet has only 3 columns: Title, Sourcing Link, Price
 const OPT_IN_COLS = new Set([
-  'no', 'platform', 'labelCost', 'listPrice', 'profit',
+  'labelCost', 'listPrice', 'profit',
   'weight', 'dimL', 'dimW', 'dimH', 'variants',
   'imageCount', 'videoCount', 'videoUrl',
   'img1','img2','img3','img4','img5','img6','img7','img8','img9','img10',
   'description', 'tags', 'status', 'scrapedAt'
 ]);
 
-// Columns ON by default (everything else is OFF unless user enables it)
-const DEFAULT_ON_COLS = new Set(['title', 'url', 'price']);
+// Columns ON by default: #, Title, Sourcing Link, Platform, Price
+const DEFAULT_ON_COLS = new Set(['no', 'title', 'url', 'price']);
 
 function getEnabledColumns() {
   const prefs = State.data?.settings?.bulkSheetColumns || {};
@@ -5492,17 +5559,15 @@ function getEnabledColumns() {
   const hasSavedPrefs = Object.keys(prefs).length > 0;
 
   const enabled = fullCols.filter(c => {
-    if (hasSavedPrefs) {
-      // User has explicitly saved prefs — respect them
-      if (prefs[c.key] === true)  return true;
-      if (prefs[c.key] === false) return false;
-      // Not in prefs yet → use default
+    if (hasSavedPrefs && prefs[c.key] !== undefined) {
+      // User explicitly set this column — respect it
+      return prefs[c.key] === true;
     }
-    // No prefs saved → only default 3 ON
+    // Not in prefs → use DEFAULT_ON_COLS
     return DEFAULT_ON_COLS.has(c.key);
   });
 
-  // Safety: always return at least title, url, price
+  // Safety: always return at least the 5 default columns
   return enabled.length ? enabled : fullCols.filter(c => DEFAULT_ON_COLS.has(c.key));
 }
 
@@ -6525,8 +6590,9 @@ document.getElementById('bulkZipBtn')
 
 // ── State ─────────────────────────────────────────────────────
 const ImgState = {
-  images: [],      // [{ src, w, h }]
-  selected: new Set() // indices
+  images:      [],      // [{ src, w, h, role?, score? }]
+  selected:    new Set(), // indices of visible (filtered) images
+  roleFilter:  'all'   // v9: current role filter chip
 };
 
 // ── Inject into active tab via chrome.scripting ───────────────
@@ -6707,7 +6773,17 @@ const results = await chrome.scripting.executeScript({
             images.push(large);
           });
         } else {
-          document.querySelectorAll('img').forEach(img => images.push(img.src));
+          // Generic fallback: filter out obvious non-product images
+          const badGeneric = ['logo','icon','badge','banner','sprite','nav','header','footer','avatar','payment','star','rating','arrow','btn','button','social','share','close','menu'];
+          document.querySelectorAll('img').forEach(img => {
+            const src = img.src || '';
+            if (!src.startsWith('http')) return;
+            const lower = src.toLowerCase();
+            if (badGeneric.some(w => lower.includes(w))) return;
+            // Only include images with meaningful natural dimensions
+            if (img.naturalWidth > 0 && img.naturalWidth < 100) return;
+            images.push(src);
+          });
         }
 
         // Apply Global Filters: max 20 images, no duplicates, filter out logo, icon, badge, banner
@@ -6754,21 +6830,24 @@ const results = await chrome.scripting.executeScript({
 
     setImgStatus(`Found ${scrapedUrls.length} images. Filtering by size…`, 'info');
 
-    // 4. Filter by Minimum Size (200x200px)
-    const validImages = [];
-    for (const url of scrapedUrls) {
-      try {
-        const dim = await measureImage(url);
-        if (dim && dim.w >= 200 && dim.h >= 200) {
-          validImages.push(dim);
-        }
-      } catch (e) {
-        // Skip on error
-      }
-    }
+    // ── Bug fix: read user's imageMinSize setting (default 200) ──
+    let minSize = 200;
+    try {
+      const d = await msg({ action: 'GET_DATA' });
+      const userMin = parseInt(d?.settings?.imageMinSize, 10);
+      if (!isNaN(userMin)) minSize = Math.max(0, userMin);
+    } catch (_) {}
+
+    // ── Bug fix: measure ALL images in parallel (3-5x faster) ────
+    const allDims = await Promise.all(
+      scrapedUrls.map(url => measureImage(url).catch(() => null))
+    );
+    const validImages = allDims.filter(
+      dim => dim && dim.w >= minSize && dim.h >= minSize
+    );
 
     if (!validImages.length) {
-      showImgEmpty('No valid product images found (all smaller than 200x200px).');
+      showImgEmpty(`No valid product images found (all smaller than ${minSize}×${minSize}px).`);
       setImgStatus('0 images found', '');
       return;
     }
@@ -6776,11 +6855,20 @@ const results = await chrome.scripting.executeScript({
     // Sort by resolution: largest first so best quality images appear at the top
     validImages.sort((a, b) => (b.w * b.h) - (a.w * a.h));
 
-    ImgState.images = validImages;
-    ImgState.selected = new Set(validImages.map((_, i) => i));
+    // ── v9: classify images with ZHClassifier if available ────
+    if (window.ZHClassifier && typeof window.ZHClassifier.classifyAndDeduplicateImages === 'function') {
+      ImgState.images   = window.ZHClassifier.classifyAndDeduplicateImages(validImages);
+    } else {
+      ImgState.images   = validImages;
+    }
+    ImgState.selected  = new Set(ImgState.images.map((_, i) => i));
+    ImgState.roleFilter = 'all';
+
+    // Reset role filter chips UI
+    document.querySelectorAll('.role-chip').forEach(c => c.classList.toggle('active', c.dataset.role === 'all'));
 
     renderImgGrid();
-    setImgStatus(`${validImages.length} image${validImages.length !== 1 ? 's' : ''} found`, 'ok');
+    setImgStatus(`${ImgState.images.length} image${ImgState.images.length !== 1 ? 's' : ''} found`, 'ok');
 
   } catch (err) {
     console.error('[ImagesTab] scan error:', err);
@@ -7072,6 +7160,70 @@ function initImagesTab() {
   });
 
   $('imgDownloadBtn')?.addEventListener('click', () => downloadSelectedImages());
+
+  // ── Copy URLs button ──────────────────────────────────────────
+  $('imgCopyUrlsBtn')?.addEventListener('click', async () => {
+    const urls = [...ImgState.selected]
+      .map(i => ImgState.images[i]?.src)
+      .filter(Boolean);
+    if (!urls.length) { toast('No images selected', 'warn'); return; }
+    try {
+      await navigator.clipboard.writeText(urls.join('\n'));
+      toast(`${urls.length} URL${urls.length !== 1 ? 's' : ''} copied to clipboard`, 'ok');
+    } catch (_) {
+      toast('Clipboard access denied', 'err');
+    }
+  });
+
+  // ── v9: Role filter chip bar ──────────────────────────────────
+  document.querySelectorAll('.role-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.role-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      ImgState.roleFilter = chip.dataset.role || 'all';
+      if (ImgState.roleFilter === 'all') {
+        ImgState.selected = new Set(ImgState.images.map((_, i) => i));
+      } else {
+        ImgState.selected = new Set(
+          ImgState.images
+            .map((img, i) => ({ img, i }))
+            .filter(({ img }) => (img.role || 'unknown') === ImgState.roleFilter)
+            .map(({ i }) => i)
+        );
+      }
+      renderImgGrid();
+    });
+  });
+
+  // ── Auto re-scan when user switches/navigates to a new tab ───
+  let _lastAutoScanUrl = '';
+  function _autoRescan(tabId, url) {
+    // Only trigger if Hunt tab is currently active in the sidepanel
+    const huntPanel = document.getElementById('tab-hunt');
+    if (!huntPanel || huntPanel.classList.contains('hidden')) return;
+    if (!url || url === _lastAutoScanUrl) return;
+    if (url.startsWith('chrome://') || url.startsWith('chrome-extension://')) return;
+    _lastAutoScanUrl = url;
+    // Small delay so the page has a moment to exist
+    setTimeout(() => {
+      ImgState.images = [];
+      ImgState.selected.clear();
+      scanPageImages();
+    }, 800);
+  }
+
+  chrome.tabs.onActivated.addListener(async (info) => {
+    try {
+      const tab = await chrome.tabs.get(info.tabId);
+      _autoRescan(info.tabId, tab.url);
+    } catch (_) {}
+  });
+
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.status === 'complete' && tab.active) {
+      _autoRescan(tabId, tab.url);
+    }
+  });
 }
 
 // ============================================================
@@ -7556,3 +7708,147 @@ async function downloadAllVideosAsZip() {
 
 // Init video tab on load
 document.addEventListener('DOMContentLoaded', () => initVideoTab(), { once: true });
+
+// ── Import Preview Dialog ─────────────────────────────────────
+// Called by sidepanel-shell.js when the user clicks "Add open tabs to queue".
+// Shows a grouped modal: Accepted / Already queued / Unsupported.
+// User can deselect individual rows before confirming.
+//
+// @param {Array}  candidates  - [{url, title, source}] raw tabs from the browser
+// @param {string} sourceLabel - label for display only (e.g. 'open_tab')
+// @param {Object} opts        - { adder: async(items) => result }
+async function showQueueImportPreview(candidates, sourceLabel, opts = {}) {
+  const $ = id => document.getElementById(id);
+  const modal    = $('queueImportPreviewModal');
+  const summary  = $('qipSummary');
+  const groups   = $('qipGroups');
+  const confirmBtn = $('qipConfirmBtn');
+  const cancelBtn  = $('qipCancelBtn');
+  const closeBtn   = $('qipClose');
+  const selAllBtn  = $('qipSelectAllBtn');
+  const selNoneBtn = $('qipSelectNoneBtn');
+  if (!modal) return;
+
+  // ── Show loading state ─────────────────────────────────────
+  summary.innerHTML = '';
+  groups.innerHTML  = `<div class="qip-loading"><span class="spinner"></span> Checking ${candidates.length} tab${candidates.length !== 1 ? 's' : ''} against queue…</div>`;
+  confirmBtn.disabled = true;
+  confirmBtn.textContent = 'Add 0 to queue';
+  modal.classList.remove('hidden');
+
+  // ── Call backend preview ───────────────────────────────────
+  let preview = { accepted: [], duplicates: [], rejected: [] };
+  try {
+    const res = await msg({ action: 'PREVIEW_BULK_QUEUE', items: candidates });
+    if (res) {
+      preview.accepted   = Array.isArray(res.accepted)   ? res.accepted   : [];
+      preview.duplicates = Array.isArray(res.duplicates) ? res.duplicates : [];
+      preview.rejected   = Array.isArray(res.rejected)   ? res.rejected   : [];
+    }
+  } catch (e) {
+    // If preview action unavailable, treat all as accepted
+    preview.accepted = candidates;
+  }
+
+  // ── Build summary pills ───────────────────────────────────
+  const pills = [
+    preview.accepted.length   ? `<span class="qip-pill qip-pill-ok">✓ ${preview.accepted.length} new</span>`   : '',
+    preview.duplicates.length ? `<span class="qip-pill qip-pill-dup">⚑ ${preview.duplicates.length} duplicate${preview.duplicates.length !== 1 ? 's' : ''}</span>` : '',
+    preview.rejected.length   ? `<span class="qip-pill qip-pill-skip">✕ ${preview.rejected.length} unsupported</span>` : '',
+  ].filter(Boolean).join('');
+  summary.innerHTML = pills || '<span class="qip-pill qip-pill-skip">Nothing to import</span>';
+
+  // ── Render grouped item rows ──────────────────────────────
+  function makeRow(item, kind) {
+    const isOk   = kind === 'ok';
+    const isDup  = kind === 'dup';
+    const isSkip = kind === 'skip';
+    const host = (() => { try { return new URL(item.url).hostname.replace(/^www\./,''); } catch(_){ return ''; } })();
+    const faviconUrl = `https://www.google.com/s2/favicons?sz=16&domain=${encodeURIComponent(host)}`;
+    const row = document.createElement('label');
+    row.className = `qip-item${isDup ? ' is-dup' : ''}${isSkip ? ' is-skip' : ''}`;
+    row.dataset.url = item.url;
+    const cb = isSkip ? '' : `<input type="checkbox" ${isOk ? 'checked' : ''} data-url="${item.url.replace(/"/g,'&quot;')}">`;
+    const badge = isDup  ? `<span class="qip-badge qip-badge-dup">Already queued</span>`
+                : isSkip ? `<span class="qip-badge qip-badge-skip">Unsupported</span>` : '';
+    row.innerHTML = `
+      ${cb}
+      <img class="qip-item-favicon" src="${faviconUrl}" alt="" loading="lazy" onerror="this.style.display='none'">
+      <span class="qip-item-text">
+        <span class="qip-item-title">${(item.title || host || item.url).substring(0, 80)}</span>
+        <span class="qip-item-url">${host || item.url.substring(0, 60)}</span>
+      </span>
+      ${badge}`;
+    return row;
+  }
+
+  function renderGroups() {
+    groups.innerHTML = '';
+
+    if (preview.accepted.length) {
+      const g = document.createElement('div');
+      g.innerHTML = `<div class="qip-group-label">New — will be added</div>`;
+      preview.accepted.forEach(i => g.appendChild(makeRow(i, 'ok')));
+      groups.appendChild(g);
+    }
+    if (preview.duplicates.length) {
+      const g = document.createElement('div');
+      g.innerHTML = `<div class="qip-group-label">Already in queue</div>`;
+      preview.duplicates.forEach(i => g.appendChild(makeRow(i, 'dup')));
+      groups.appendChild(g);
+    }
+    if (preview.rejected.length) {
+      const g = document.createElement('div');
+      g.innerHTML = `<div class="qip-group-label">Unsupported sites</div>`;
+      preview.rejected.forEach(i => g.appendChild(makeRow(i, 'skip')));
+      groups.appendChild(g);
+    }
+    if (!preview.accepted.length && !preview.duplicates.length && !preview.rejected.length) {
+      groups.innerHTML = '<div class="empty"><p>No product tabs found in your open tabs.</p></div>';
+    }
+    syncConfirmBtn();
+  }
+
+  function syncConfirmBtn() {
+    const checked = [...groups.querySelectorAll('input[type=checkbox]:checked')];
+    confirmBtn.disabled = checked.length === 0;
+    confirmBtn.textContent = `Add ${checked.length} to queue`;
+  }
+
+  renderGroups();
+  groups.addEventListener('change', syncConfirmBtn);
+
+  // ── Select All / None ────────────────────────────────────
+  selAllBtn.onclick  = () => { groups.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = true);  syncConfirmBtn(); };
+  selNoneBtn.onclick = () => { groups.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false); syncConfirmBtn(); };
+
+  // ── Close helpers ────────────────────────────────────────
+  function closeModal() {
+    modal.classList.add('hidden');
+    groups.innerHTML  = '';
+    summary.innerHTML = '';
+  }
+  closeBtn.onclick  = closeModal;
+  cancelBtn.onclick = closeModal;
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); }, { once: false });
+
+  // ── Confirm: gather checked items and call adder ─────────
+  confirmBtn.onclick = async () => {
+    const checkedUrls = new Set([...groups.querySelectorAll('input[type=checkbox]:checked')].map(cb => cb.dataset.url));
+    const toAdd = [...preview.accepted, ...preview.duplicates]
+      .filter(i => checkedUrls.has(i.url))
+      .map(i => ({ url: i.url, title: i.title || '', source: sourceLabel || 'open_tab' }));
+    if (!toAdd.length) { closeModal(); return; }
+
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = `Adding ${toAdd.length}…`;
+    try {
+      if (typeof opts.adder === 'function') {
+        await opts.adder(toAdd);
+      }
+    } catch(e) {
+      if (typeof toast === 'function') toast('Failed to add items: ' + (e.message || 'Unknown error'), 'err');
+    }
+    closeModal();
+  };
+}

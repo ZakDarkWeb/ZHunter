@@ -1,5 +1,5 @@
 // ============================================================
-// ZHunter PRO v7.9.15 — Content Script
+// ZHunter PRO v8.3.5 — Content Script
 // ============================================================
 // Fixes vs 7.6.0:
 //   • Issue 1: Correct price extraction — reads full price string
@@ -26,10 +26,25 @@ window.__zhunterContentLoaded = true;
 const IMG_CAP = 15;
 const VID_CAP = 12;
 
-// FIX: Cache the harvestInlineJson result per page load.
-// On complex pages (Next.js/Walmart/Amazon) the inline scripts can be 500 KB–2 MB.
-// Re-parsing them on every SCRAPE_PAGE message caused 200–500 ms freezes.
+// FIX BUG 6: Clear the cache when the page URL changes (SPA navigation).
+// On SPAs (Amazon, Walmart) client-side navigation doesn't reload the script,
+// so _harvestCache would serve Product A's images when the user views Product B.
 let _harvestCache = null;
+let _harvestCacheUrl = '';
+document.addEventListener('visibilitychange', () => {
+  // Clear cache any time the tab becomes visible again; URL may have changed.
+  if (document.visibilityState === 'visible' && location.href !== _harvestCacheUrl) {
+    _harvestCache = null;
+    _harvestCacheUrl = '';
+  }
+});
+// Also hook popstate / pushState for in-page navigation
+const _zhOrigPush = history.pushState.bind(history);
+history.pushState = function(...args) {
+  _harvestCache = null; _harvestCacheUrl = '';
+  return _zhOrigPush(...args);
+};
+window.addEventListener('popstate', () => { _harvestCache = null; _harvestCacheUrl = ''; });
 
 // ── Basics ──────────────────────────────────────────────────
 const absUrl = u => { try { return new URL(u, location.href).href; } catch (_) { return u || ''; } };
@@ -182,10 +197,14 @@ function isBadImage(url) {
   if (s.startsWith('data:image/svg') || s.endsWith('.svg')) return true;
   if (/PHN2Z/.test(s)) return true; // base64 svg
 
-  // ── Keyword-based exclusions (expanded) ──────────────────
-  if (/\b(logo|logos|sprite|sprites|favicon|avatar|placeholder|spacer|pixel|blank|loading|tracking|banner|header|footer|badge|watermark|branding|navbar|navigation|overlay|spinner|advertisement|ribbon|sticker)\b/.test(s)) return true;
+  // ── Keyword-based exclusions ──────────────────────────────
+  // FIX BUG 7: "banner" was matched as a whole word anywhere in the URL.
+  // This blocked product images like "product-banner-red-64oz.jpg" on Faire/eBay.
+  // Now only the path-segment /banner/ is excluded, not the word inside a filename.
+  if (/\b(logo|logos|sprite|sprites|favicon|avatar|placeholder|spacer|pixel|blank|loading|tracking|watermark|branding|ribbon|sticker)\b/.test(s)) return true;
+  if (/\/banner\/|\/banners\/|hero[-_]banner|promo[-_]banner|category[-_]banner/.test(s)) return true;
   if (/\/icon\/|\/icons\/|[_-]icon[_.@-]|icon[_.@-]\d|\/nav\/|\/menu\/|\/cart\/|\/checkout\/|\/ad[-_]|payment[-_]icon|payment[-_]method|trust[-_]badge|trust[-_]seal/.test(s)) return true;
-  if (/hero[-_]banner|promo[-_]banner|category[-_]banner|category[-_]image|\/department\/|\/category\/|\/brand\/|brand[-_]logo|\/circular\/|\/hero\/|\/search\/|search[-_]icon/.test(s)) return true;
+  if (/category[-_]banner|category[-_]image|\/department\/|\/category\/|\/brand\/|brand[-_]logo|\/circular\/|\/hero\/|\/search\/|search[-_]icon/.test(s)) return true;
   if (/\/rating\/|star[-_]rating|review[-_]star|\/social\/|social[-_]share|\/upsell\/|\/related\/|\/recommendation|\/similar\/|\/customer[-_]review|\/review[-_]image/.test(s)) return true;
   if (/\/seller\/|seller[-_]logo|\/store\/|store[-_]logo|\/gift[-_]wrap|\/delivery\/|\/shipping\//.test(s)) return true;
 
@@ -586,8 +605,8 @@ function walkJsonForMedia(rootJson, found) {
 }
 
 async function harvestInlineJson() {
-  // Return cached result from this page load if available
-  if (_harvestCache) return _harvestCache;
+  // Return cached result if the page URL hasn't changed since last harvest
+  if (_harvestCache && location.href === _harvestCacheUrl) return _harvestCache;
 
   const found = { images: [], videos: [], price: '' };
   // Dedup guard: all video pushes go through addFoundVideo() which checks this Set.
@@ -759,7 +778,8 @@ async function harvestInlineJson() {
   }
   found.videos = finalVids;
 
-  _harvestCache = found; // cache for subsequent calls on this page load
+  _harvestCache = found;    // cache for subsequent calls on this page load
+  _harvestCacheUrl = location.href; // FIX BUG 6: track which URL this cache belongs to
   return found;
 }
 
@@ -2969,234 +2989,197 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       * { box-sizing: border-box; margin: 0; padding: 0; }
       :host { all: initial; }
 
-      @keyframes zh-slide-in {
-        from { opacity: 0; transform: translateX(100%) scale(0.95); }
-        to   { opacity: 1; transform: translateX(0) scale(1); }
+      /* ── Keyframes ───────────────────────────────────────── */
+      @keyframes zh-open {
+        from { opacity: 0; transform: scale(0.88) translateY(12px); }
+        to   { opacity: 1; transform: scale(1)    translateY(0); }
       }
       @keyframes zh-fade-up {
-        from { opacity: 0; transform: translateY(10px) scale(0.9); }
-        to   { opacity: 1; transform: translateY(0) scale(1); }
-      }
-      @keyframes zh-border-pulse {
-        0%,100% { border-color: rgba(0,229,255,0.35); box-shadow: -4px 0 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,229,255,0.08); }
-        50%      { border-color: rgba(0,229,255,0.7); box-shadow: -6px 0 40px rgba(0,229,255,0.15), 0 0 0 1px rgba(0,229,255,0.2); }
+        from { opacity: 0; transform: translateY(8px) scale(0.94); }
+        to   { opacity: 1; transform: translateY(0)  scale(1); }
       }
       @keyframes zh-shimmer {
         0%   { background-position: -200% 0; }
-        100% { background-position: 200% 0; }
+        100% { background-position:  200% 0; }
       }
       @keyframes zh-check-pop {
         0%   { transform: scale(0) rotate(-20deg); opacity: 0; }
         60%  { transform: scale(1.3) rotate(5deg); opacity: 1; }
-        100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        100% { transform: scale(1)  rotate(0deg); opacity: 1; }
+      }
+      @keyframes zh-spin {
+        from { transform: rotate(0deg); }
+        to   { transform: rotate(360deg); }
+      }
+      @keyframes zh-panel-spin {
+        from { transform: translate(-50%,-50%) rotate(0deg); }
+        to   { transform: translate(-50%,-50%) rotate(360deg); }
+      }
+      @keyframes zh-glow-pulse {
+        0%,100% { box-shadow: 0 0 18px rgba(0,229,255,0.25), 0 16px 48px rgba(0,0,0,0.7); }
+        50%     { box-shadow: 0 0 32px rgba(0,229,255,0.45), 0 20px 56px rgba(0,0,0,0.75); }
+      }
+      @keyframes zh-badge-pulse {
+        0%   { transform: scale(1);    box-shadow: 0 0 8px  rgba(0,229,255,0.5); }
+        40%  { transform: scale(1.45); box-shadow: 0 0 18px rgba(0,229,255,0.9); }
+        100% { transform: scale(1);    box-shadow: 0 0 8px  rgba(0,229,255,0.5); }
       }
       @keyframes zh-btn-shine {
         0%   { background-position: -200% center; }
-        100% { background-position: 200% center; }
+        100% { background-position:  200% center; }
       }
 
-      /* ── Panel Wrapper with Rainbow Border ── */
+      /* ── Panel wrapper ───────────────────────────────────── */
       .panel-wrap {
         position: relative;
-        border-radius: 18px;
-        padding: 2px;
-        overflow: hidden; /* clips the ring to rounded shape */
-        box-shadow: 0 0 24px rgba(120,0,255,0.25), 0 8px 32px rgba(0,0,0,0.65);
+        border-radius: 20px;
+        padding: 1.5px;
+        overflow: hidden;
+        animation: zh-open 0.38s cubic-bezier(0.16,1,0.3,1) both;
+        animation: zh-glow-pulse 3s ease-in-out infinite;
+        box-shadow: 0 16px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(0,229,255,0.12);
       }
-      /* This ::before pseudo is MUCH larger than parent so the conic-gradient
-         sweeps uniformly around all 4 edges when it spins */
+      /* Thin animated cyan border */
       .panel-wrap::before {
         content: '';
         position: absolute;
         top: 50%; left: 50%;
         width: 400%; height: 400%;
-        transform: translate(-50%, -50%) rotate(0deg);
-        background: conic-gradient(from 0deg, #ff0000, #ff7f00, #ffff00, #00ff00, #00ffff, #0000ff, #8b00ff, #ff0000);
+        transform: translate(-50%,-50%) rotate(0deg);
+        background: conic-gradient(from 0deg,
+          transparent 0%,
+          rgba(0,229,255,0.8) 20%,
+          rgba(168,85,247,0.6) 40%,
+          transparent 60%
+        );
         animation: zh-panel-spin 4s linear infinite;
         z-index: 0;
       }
-      .panel {
-        width: 295px;
-        background: rgba(4, 8, 20, 0.97);
-        backdrop-filter: blur(20px) saturate(180%);
-        border-radius: 16px;
-        overflow: hidden;
-        font-family: 'Inter', system-ui, -apple-system, sans-serif;
-        animation: zh-slide-in 0.45s cubic-bezier(0.16,1,0.3,1) both;
-        transition: transform 0.4s cubic-bezier(0.16,1,0.3,1);
-        position: relative; z-index: 1;
-      }
       .panel-wrap.collapsed { display: none; }
-      /* ── Minimized FAB: Circular Spinning Rainbow Style (PRO Grade) ── */
-      /* zh-spin: for circular FAB ring divs */
-      @keyframes zh-spin {
-        from { transform: rotate(0deg); }
-        to   { transform: rotate(360deg); }
-      }
-      /* zh-panel-spin: for panel ::before — must keep translate so centering stays */
-      @keyframes zh-panel-spin {
-        from { transform: translate(-50%, -50%) rotate(0deg); }
-        to   { transform: translate(-50%, -50%) rotate(360deg); }
-      }
-      @keyframes zh-badge-pulse {
-        0%   { transform: scale(1); box-shadow: 0 0 8px rgba(52,211,100,0.6); }
-        40%  { transform: scale(1.45); box-shadow: 0 0 18px rgba(52,211,100,0.9); }
-        100% { transform: scale(1); box-shadow: 0 0 8px rgba(52,211,100,0.6); }
-      }
-      /* FAB outer wrapper — isolates stacking context so ::before/::after ring is always visible */
-      .mini-widget-wrap {
-        position: relative;
-        width: 60px; height: 60px;
-        display: flex; align-items: center; justify-content: center;
-      }
-      /* Spinning rainbow ring layer (behind FAB button) */
-      .mini-ring {
-        position: absolute;
-        inset: 0;
-        border-radius: 50%;
-        background: conic-gradient(from 0deg, #ff0000, #ff7f00, #ffff00, #00ff00, #00ffff, #0000ff, #8b00ff, #ff0000);
-        animation: zh-spin 3.5s linear infinite;
-        z-index: 0;
-      }
-      /* Blurred glow layer */
-      .mini-glow {
-        position: absolute;
-        inset: 0;
-        border-radius: 50%;
-        background: conic-gradient(from 0deg, #ff0000, #ff7f00, #ffff00, #00ff00, #00ffff, #0000ff, #8b00ff, #ff0000);
-        animation: zh-spin 3.5s linear infinite;
-        filter: blur(10px);
-        opacity: 0.6;
-        transition: opacity 0.25s ease, filter 0.25s ease;
-        z-index: 0;
-      }
-      .mini-widget-wrap:hover .mini-glow { filter: blur(15px); opacity: 0.95; }
-      .mini-widget {
-        width: 54px; height: 54px;
-        border-radius: 50%;
-        position: relative;
-        display: flex; align-items: center; justify-content: center;
-        cursor: grab; user-select: none; touch-action: none;
-        background: radial-gradient(circle at 40% 35%, #0d2340 0%, #040d1a 100%);
-        box-shadow: 0 4px 18px rgba(0,0,0,0.5);
-        transition: transform 0.2s cubic-bezier(0.16,1,0.3,1);
-        z-index: 1;
-        border: none;
-        outline: none;
-      }
-      .mini-widget:hover { transform: scale(1.08); cursor: grab; }
-      .mini-widget:active { cursor: grabbing; transform: scale(0.94); }
-      .mini-widget img {
-        width: 34px; height: 34px; object-fit: contain; pointer-events: none;
-        border-radius: 50%;
-        transition: transform 0.2s ease;
-        filter: drop-shadow(0 0 4px rgba(0, 229, 255, 0.4));
-      }
-      .mini-widget:hover img { transform: scale(1.06); }
-      .mini-logo-fallback { display: none; color: #00e5ff; font: 900 16px/1 system-ui, sans-serif; letter-spacing: -1px; text-shadow: 0 0 10px rgba(0,229,255,0.75); pointer-events: none; }
-      /* Hover tooltip */
-      .mini-tooltip {
-        position: absolute;
-        bottom: calc(100% + 10px);
-        left: 50%; transform: translateX(-50%) scale(0.85);
-        background: rgba(4,8,20,0.92);
-        border: 1px solid rgba(0,229,255,0.35);
-        backdrop-filter: blur(10px);
-        color: #e0f7fa; font-size: 10px; font-weight: 600;
-        white-space: nowrap; padding: 5px 10px;
-        border-radius: 8px;
-        pointer-events: none;
-        opacity: 0;
-        transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.16,1,0.3,1);
-        box-shadow: 0 4px 16px rgba(0,0,0,0.5), 0 0 8px rgba(0,229,255,0.15);
-        z-index: 10;
-      }
-      .mini-tooltip::after {
-        content: '';
-        position: absolute; top: 100%; left: 50%;
-        transform: translateX(-50%);
-        border: 5px solid transparent;
-        border-top-color: rgba(0,229,255,0.35);
-      }
-      .mini-widget-wrap:hover .mini-tooltip {
-        opacity: 1; transform: translateX(-50%) scale(1);
-      }
-      .mini-count {
-        position: absolute;
-        top: -4px; right: -4px;
-        min-width: 19px; height: 19px;
-        background: #34d364;
-        color: #000000; font-weight: 800; font-size: 10px;
-        padding: 0 5px; border-radius: 999px;
-        border: 2px solid #040d1a;
-        box-shadow: 0 0 8px rgba(52,211,100,0.6);
-        pointer-events: none;
-        font-family: system-ui, sans-serif;
-        display: flex; align-items: center; justify-content: center;
-        z-index: 12;
-      }
-      .mini-count.pulse { animation: zh-badge-pulse 0.4s cubic-bezier(0.16,1,0.3,1); }
 
-      .header { cursor: grab; touch-action: none; }
-      .header:active { cursor: grabbing; }
+      /* ── Panel glass body ────────────────────────────────── */
+      .panel {
+        width: 300px;
+        background: rgba(5, 10, 24, 0.92);
+        backdrop-filter: blur(24px) saturate(160%);
+        -webkit-backdrop-filter: blur(24px) saturate(160%);
+        border-radius: 19px;
+        overflow: hidden;
+        font-family: 'Inter', 'Outfit', system-ui, -apple-system, sans-serif;
+        position: relative; z-index: 1;
+        animation: zh-open 0.38s cubic-bezier(0.16,1,0.3,1) both;
+      }
 
+      /* ── Header ──────────────────────────────────────────── */
       .header {
         display: flex; align-items: center; justify-content: space-between;
-        padding: 11px 12px;
-        background: linear-gradient(135deg, rgba(0,229,255,0.13) 0%, rgba(6,182,212,0.06) 50%, rgba(14,165,233,0.04) 100%);
-        border-bottom: 1px solid rgba(0,229,255,0.15);
+        padding: 12px 14px 11px;
+        background: linear-gradient(135deg,
+          rgba(0,229,255,0.10) 0%,
+          rgba(168,85,247,0.06) 60%,
+          rgba(0,0,0,0) 100%);
+        border-bottom: 1px solid rgba(255,255,255,0.07);
         cursor: pointer; user-select: none;
         transition: background 0.2s;
+        position: relative;
       }
-      .header:hover { background: linear-gradient(135deg, rgba(0,229,255,0.18) 0%, rgba(6,182,212,0.10) 100%); }
-      .header-left { display: flex; align-items: center; gap: 8px; }
+      /* Accent line at very top of header */
+      .header::before {
+        content: '';
+        position: absolute; top: 0; left: 14px; right: 14px; height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(0,229,255,0.6), rgba(168,85,247,0.5), transparent);
+        border-radius: 1px;
+      }
+      .header:hover { background: linear-gradient(135deg, rgba(0,229,255,0.14) 0%, rgba(168,85,247,0.09) 100%); }
+      .header-left { display: flex; align-items: center; gap: 9px; }
       .header-icon {
-        width: 28px; height: 28px;
-        background: transparent;
-        border-radius: 8px;
+        width: 30px; height: 30px;
+        border-radius: 9px;
+        background: rgba(0,229,255,0.08);
+        border: 1px solid rgba(0,229,255,0.2);
         display: flex; align-items: center; justify-content: center;
         flex-shrink: 0;
-        transition: transform 0.2s, box-shadow 0.2s;
+        transition: transform 0.25s cubic-bezier(0.16,1,0.3,1), box-shadow 0.25s;
         overflow: hidden;
       }
       .header-icon img {
-        width: 28px; height: 28px; object-fit: contain; display: block; pointer-events: none;
-        filter: drop-shadow(0 0 6px rgba(0,229,255,0.6));
-        border-radius: 7px;
+        width: 24px; height: 24px; object-fit: contain; display: block;
+        filter: drop-shadow(0 0 5px rgba(0,229,255,0.5));
+        border-radius: 6px;
       }
-      .header:hover .header-icon { transform: rotate(-5deg) scale(1.08); box-shadow: 0 4px 18px rgba(0,229,255,0.7); }
-      .header-title { color: #e0f7fa; font-size: 12px; font-weight: 700; letter-spacing: 0.4px; text-shadow: 0 0 12px rgba(0,229,255,0.4); }
+      .header:hover .header-icon {
+        transform: rotate(-8deg) scale(1.1);
+        box-shadow: 0 4px 14px rgba(0,229,255,0.5);
+      }
+      .header-info { display: flex; flex-direction: column; gap: 1px; }
+      .header-title {
+        color: #e0f7fa; font-size: 12px; font-weight: 700;
+        letter-spacing: 0.3px;
+        text-shadow: 0 0 10px rgba(0,229,255,0.35);
+      }
+      .header-sub {
+        color: rgba(103,232,249,0.55); font-size: 10px; font-weight: 500;
+      }
+      .header-right { display: flex; align-items: center; gap: 6px; }
       .header-count {
-        font-size: 10px; font-weight: 700; padding: 2px 8px;
-        background: rgba(0,229,255,0.15); border: 1px solid rgba(0,229,255,0.35);
-        border-radius: 9999px; color: #67e8f9;
-        transition: background 0.2s, transform 0.15s;
+        font-size: 10px; font-weight: 800;
+        padding: 2px 8px;
+        background: rgba(0,229,255,0.12);
+        border: 1px solid rgba(0,229,255,0.28);
+        border-radius: 999px;
+        color: #67e8f9;
+        letter-spacing: 0.2px;
       }
       .toggle-btn {
-        background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
-        cursor: pointer; color: #7dd3fc; padding: 5px 8px;
-        line-height: 1; border-radius: 6px; display: flex; align-items: center; justify-content: center;
-        transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.2s cubic-bezier(0.16,1,0.3,1);
+        width: 26px; height: 26px;
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 7px;
+        cursor: pointer; color: #7dd3fc;
+        display: flex; align-items: center; justify-content: center;
+        transition: background 0.15s, color 0.15s, transform 0.2s cubic-bezier(0.16,1,0.3,1);
+        flex-shrink: 0;
       }
-      .toggle-btn svg { pointer-events: none; transition: transform 0.3s cubic-bezier(0.16,1,0.3,1); }
-      .toggle-btn:hover { background: rgba(0,229,255,0.12); border-color: rgba(0,229,255,0.4); color: #00e5ff; transform: scale(1.12); }
-      .toggle-btn:hover svg { transform: scale(1.1); }
+      .toggle-btn svg { pointer-events: none; }
+      .toggle-btn:hover {
+        background: rgba(0,229,255,0.12);
+        border-color: rgba(0,229,255,0.4);
+        color: #00e5ff;
+        transform: scale(1.12);
+      }
 
+      /* ── Body ────────────────────────────────────────────── */
       .body {
-        padding: 10px; overflow-y: auto; overflow-x: hidden;
-        max-height: 360px;
+        padding: 10px;
+        overflow-y: auto; overflow-x: hidden;
+        max-height: 340px;
       }
       .body::-webkit-scrollbar { width: 3px; }
-      .body::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); }
-      .body::-webkit-scrollbar-thumb { background: linear-gradient(to bottom, #00e5ff, #0ea5e9); border-radius: 3px; }
+      .body::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
+      .body::-webkit-scrollbar-thumb {
+        background: linear-gradient(to bottom, #00e5ff, #a855f7);
+        border-radius: 3px;
+      }
 
-      .empty { text-align: center; padding: 28px 12px; color: #3b6a8a; font-size: 11px; line-height: 1.7; }
+      /* ── Empty / status states ───────────────────────────── */
+      .empty {
+        text-align: center;
+        padding: 32px 16px;
+        color: rgba(103,232,249,0.35);
+        font-size: 12px; line-height: 1.8;
+      }
+      .empty-icon { font-size: 28px; margin-bottom: 8px; display: block; opacity: 0.5; }
 
+      /* ── Skeleton loader ─────────────────────────────────── */
       .skeleton { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
       .skel-item {
-        aspect-ratio: 1; border-radius: 8px;
-        background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(0,229,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
-        background-size: 200% 100%; animation: zh-shimmer 1.5s ease-in-out infinite;
+        aspect-ratio: 1; border-radius: 10px;
+        background: linear-gradient(90deg,
+          rgba(255,255,255,0.04) 25%,
+          rgba(0,229,255,0.07) 50%,
+          rgba(255,255,255,0.04) 75%);
+        background-size: 200% 100%;
+        animation: zh-shimmer 1.6s ease-in-out infinite;
       }
       .skel-item:nth-child(2) { animation-delay: 0.15s; }
       .skel-item:nth-child(3) { animation-delay: 0.30s; }
@@ -3204,105 +3187,213 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .skel-item:nth-child(5) { animation-delay: 0.60s; }
       .skel-item:nth-child(6) { animation-delay: 0.75s; }
 
-      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
-
+      /* ── Image grid ──────────────────────────────────────── */
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
       .img-wrap {
-        position: relative; border-radius: 9px; overflow: hidden;
-        border: 2px solid rgba(255,255,255,0.06); cursor: pointer;
-        aspect-ratio: 1; background: #080f1e;
-        transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+        position: relative; border-radius: 10px; overflow: hidden;
+        border: 1.5px solid rgba(255,255,255,0.06);
+        cursor: pointer; aspect-ratio: 1;
+        background: rgba(255,255,255,0.03);
+        transition: border-color 0.2s, transform 0.22s cubic-bezier(0.16,1,0.3,1), box-shadow 0.2s;
         animation: zh-fade-up 0.4s cubic-bezier(0.16,1,0.3,1) both;
       }
-      .img-wrap:nth-child(1)  { animation-delay: 0.05s; }
-      .img-wrap:nth-child(2)  { animation-delay: 0.10s; }
-      .img-wrap:nth-child(3)  { animation-delay: 0.15s; }
-      .img-wrap:nth-child(4)  { animation-delay: 0.20s; }
-      .img-wrap:nth-child(5)  { animation-delay: 0.25s; }
-      .img-wrap:nth-child(6)  { animation-delay: 0.30s; }
-      .img-wrap:nth-child(7)  { animation-delay: 0.35s; }
-      .img-wrap:nth-child(8)  { animation-delay: 0.40s; }
-      .img-wrap:nth-child(9)  { animation-delay: 0.45s; }
-      .img-wrap:nth-child(10) { animation-delay: 0.50s; }
-      .img-wrap:nth-child(11) { animation-delay: 0.55s; }
-      .img-wrap:nth-child(12) { animation-delay: 0.60s; }
+      .img-wrap:nth-child(1)  { animation-delay: 0.04s; }
+      .img-wrap:nth-child(2)  { animation-delay: 0.08s; }
+      .img-wrap:nth-child(3)  { animation-delay: 0.12s; }
+      .img-wrap:nth-child(4)  { animation-delay: 0.16s; }
+      .img-wrap:nth-child(5)  { animation-delay: 0.20s; }
+      .img-wrap:nth-child(6)  { animation-delay: 0.24s; }
+      .img-wrap:nth-child(7)  { animation-delay: 0.28s; }
+      .img-wrap:nth-child(8)  { animation-delay: 0.32s; }
+      .img-wrap:nth-child(9)  { animation-delay: 0.36s; }
       .img-wrap:hover {
-        border-color: rgba(0,229,255,0.5);
-        transform: scale(1.06) translateY(-2px);
-        box-shadow: 0 6px 20px rgba(0,0,0,0.5), 0 0 12px rgba(0,229,255,0.2);
+        border-color: rgba(0,229,255,0.45);
+        transform: scale(1.05) translateY(-2px);
+        box-shadow: 0 6px 18px rgba(0,0,0,0.5), 0 0 10px rgba(0,229,255,0.15);
         z-index: 2;
       }
-      .img-wrap.selected { border-color: #00e5ff; box-shadow: 0 0 0 1px rgba(0,229,255,0.4), 0 4px 16px rgba(0,229,255,0.2); }
-      .img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.25s; }
-      .img-wrap:hover img { transform: scale(1.08); }
+      .img-wrap.selected {
+        border-color: #00e5ff;
+        box-shadow: 0 0 0 1px rgba(0,229,255,0.35), 0 4px 14px rgba(0,229,255,0.18);
+      }
+      .img-wrap img {
+        width: 100%; height: 100%; object-fit: cover; display: block;
+        transition: transform 0.25s;
+      }
+      .img-wrap:hover img { transform: scale(1.07); }
 
+      /* Check overlay */
       .img-check {
-        position: absolute; top: 6px; left: 6px;
+        position: absolute; top: 5px; left: 5px;
         width: 18px; height: 18px; border-radius: 50%;
-        background: rgba(4,8,20,0.6); border: 1.5px solid rgba(255,255,255,0.4);
-        backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+        background: rgba(5,10,24,0.55);
+        border: 1.5px solid rgba(255,255,255,0.3);
+        backdrop-filter: blur(4px);
         display: flex; align-items: center; justify-content: center;
-        transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+        transition: background 0.18s, border-color 0.18s, box-shadow 0.18s;
         pointer-events: none;
       }
-      .img-wrap.selected .img-check { 
-        background: #00e5ff; border-color: #00e5ff; 
-        box-shadow: 0 0 10px rgba(0,229,255,0.6); 
+      .img-wrap.selected .img-check {
+        background: #00e5ff; border-color: #00e5ff;
+        box-shadow: 0 0 8px rgba(0,229,255,0.6);
       }
       .img-wrap.selected .img-check::after {
         content: '';
-        width: 4px; height: 8px;
-        border: solid #000;
-        border-width: 0 2px 2px 0;
-        transform: rotate(45deg);
-        margin-bottom: 2px;
-        animation: zh-check-pop 0.25s cubic-bezier(0.16,1,0.3,1);
+        width: 4px; height: 7px;
+        border: solid #000; border-width: 0 2px 2px 0;
+        transform: rotate(45deg); margin-bottom: 2px;
+        animation: zh-check-pop 0.22s cubic-bezier(0.16,1,0.3,1);
       }
       .img-idx {
-        position: absolute; bottom: 6px; right: 6px;
-        font-size: 9px; font-weight: 800; color: rgba(255,255,255,0.95);
-        background: rgba(4,8,20,0.65); border: 1px solid rgba(255,255,255,0.15);
-        backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-        padding: 2px 6px; border-radius: 6px;
+        position: absolute; bottom: 5px; right: 5px;
+        font-size: 9px; font-weight: 800; color: rgba(255,255,255,0.9);
+        background: rgba(5,10,24,0.6);
+        border: 1px solid rgba(255,255,255,0.12);
+        backdrop-filter: blur(6px);
+        padding: 1px 5px; border-radius: 5px;
       }
 
+      /* ── Footer ──────────────────────────────────────────── */
       .footer {
-        padding: 9px 10px;
-        border-top: 1px solid rgba(0,229,255,0.1);
-        background: rgba(0,229,255,0.02);
+        padding: 9px 10px 10px;
+        border-top: 1px solid rgba(255,255,255,0.06);
+        background: rgba(0,0,0,0.2);
         display: flex; gap: 6px; align-items: center;
       }
       .btn-sm {
-        padding: 6px 10px; border-radius: 7px;
-        font-size: 10px; font-weight: 700;
+        padding: 6px 11px; border-radius: 8px;
+        font-size: 10px; font-weight: 700; letter-spacing: 0.2px;
         cursor: pointer; border: 1px solid transparent;
         font-family: inherit; white-space: nowrap;
         transition: all 0.18s cubic-bezier(0.16,1,0.3,1);
         position: relative; overflow: hidden;
       }
-      .btn-sm:active { transform: scale(0.94) !important; }
-      .btn-ghost { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); color: #7dd3fc; }
-      .btn-ghost:hover { background: rgba(0,229,255,0.1); border-color: rgba(0,229,255,0.4); color: #00e5ff; transform: translateY(-1px); }
+      .btn-sm:active { transform: scale(0.93) !important; }
+      .btn-ghost {
+        background: rgba(255,255,255,0.05);
+        border-color: rgba(255,255,255,0.1);
+        color: #94a3b8;
+      }
+      .btn-ghost:hover {
+        background: rgba(0,229,255,0.09);
+        border-color: rgba(0,229,255,0.35);
+        color: #00e5ff;
+        transform: translateY(-1px);
+      }
       .btn-dl {
         flex: 1;
-        background: linear-gradient(90deg, #00c8ff, #0ea5e9, #00e5ff, #0ea5e9, #00c8ff);
+        background: linear-gradient(90deg, #0ea5e9, #00e5ff, #0ea5e9);
         background-size: 200% auto;
-        color: #000; font-weight: 900; letter-spacing: 0.3px;
-        box-shadow: 0 2px 12px rgba(0,229,255,0.3);
+        color: #000; font-weight: 900;
+        box-shadow: 0 2px 10px rgba(0,229,255,0.3);
         transition: all 0.3s cubic-bezier(0.16,1,0.3,1);
       }
       .btn-dl:not(:disabled):hover {
         background-position: right center;
-        box-shadow: 0 4px 20px rgba(0,229,255,0.55);
+        box-shadow: 0 4px 18px rgba(0,229,255,0.5);
         transform: translateY(-1px);
-        animation: zh-btn-shine 1.2s linear infinite;
+        animation: zh-btn-shine 1.4s linear infinite;
       }
-      .btn-dl:not(:disabled):active { transform: translateY(1px) scale(0.97); box-shadow: 0 1px 8px rgba(0,229,255,0.3); }
-      .btn-dl:disabled { opacity: 0.3; cursor: not-allowed; background: rgba(255,255,255,0.1); box-shadow: none; }
+      .btn-dl:not(:disabled):active { transform: translateY(1px) scale(0.97); }
+      .btn-dl:disabled { opacity: 0.25; cursor: not-allowed; background: rgba(255,255,255,0.08); box-shadow: none; }
 
-      .status-bar { padding: 4px 10px 8px; font-size: 10px; color: #3b6a8a; text-align: center; min-height: 20px; transition: color 0.3s; }
+      /* ── Status bar ──────────────────────────────────────── */
+      .status-bar {
+        padding: 4px 12px 8px;
+        font-size: 10px; color: rgba(148,163,184,0.5);
+        text-align: center; min-height: 20px;
+        transition: color 0.3s;
+      }
       .status-bar.ok  { color: #34d399; text-shadow: 0 0 8px rgba(52,211,153,0.4); }
       .status-bar.err { color: #f87171; }
+
+      /* ── Mini FAB ────────────────────────────────────────── */
+      .mini-widget-wrap {
+        position: relative;
+        width: 58px; height: 58px;
+        display: flex; align-items: center; justify-content: center;
+      }
+      .mini-ring {
+        position: absolute; inset: 0; border-radius: 50%;
+        background: conic-gradient(from 0deg,
+          rgba(0,229,255,0.9), rgba(168,85,247,0.8), rgba(0,229,255,0.9));
+        animation: zh-spin 3s linear infinite;
+        z-index: 0;
+      }
+      .mini-glow {
+        position: absolute; inset: 0; border-radius: 50%;
+        background: conic-gradient(from 0deg,
+          rgba(0,229,255,0.7), rgba(168,85,247,0.6), rgba(0,229,255,0.7));
+        animation: zh-spin 3s linear infinite;
+        filter: blur(8px); opacity: 0.5;
+        transition: opacity 0.25s, filter 0.25s;
+        z-index: 0;
+      }
+      .mini-widget-wrap:hover .mini-glow { filter: blur(14px); opacity: 0.85; }
+      .mini-widget {
+        width: 52px; height: 52px;
+        border-radius: 50%;
+        position: relative; z-index: 1;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; user-select: none; touch-action: none;
+        background: radial-gradient(circle at 38% 32%, rgba(0,229,255,0.12) 0%, rgba(5,10,24,0.98) 70%);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
+        transition: transform 0.22s cubic-bezier(0.16,1,0.3,1), box-shadow 0.22s;
+        border: none; outline: none;
+      }
+      .mini-widget:hover { transform: scale(1.07); }
+      .mini-widget:active { transform: scale(0.93); }
+      .mini-widget img {
+        width: 32px; height: 32px; object-fit: contain; pointer-events: none;
+        border-radius: 50%;
+        transition: transform 0.2s;
+        filter: drop-shadow(0 0 5px rgba(0,229,255,0.45));
+      }
+      .mini-widget:hover img { transform: scale(1.08) rotate(-5deg); }
+      .mini-logo-fallback { display: none; color: #00e5ff; font: 900 15px/1 system-ui, sans-serif; pointer-events: none; }
+      .mini-tooltip {
+        position: absolute;
+        bottom: calc(100% + 9px); left: 50%;
+        transform: translateX(-50%) scale(0.88) translateY(4px);
+        background: rgba(5,10,24,0.92);
+        border: 1px solid rgba(0,229,255,0.3);
+        backdrop-filter: blur(12px);
+        color: #e0f7fa; font-size: 10px; font-weight: 600;
+        white-space: nowrap; padding: 5px 10px;
+        border-radius: 8px;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.2s, transform 0.22s cubic-bezier(0.16,1,0.3,1);
+        box-shadow: 0 4px 14px rgba(0,0,0,0.5), 0 0 8px rgba(0,229,255,0.12);
+        z-index: 10;
+      }
+      .mini-tooltip::after {
+        content: '';
+        position: absolute; top: 100%; left: 50%;
+        transform: translateX(-50%);
+        border: 5px solid transparent;
+        border-top-color: rgba(0,229,255,0.3);
+      }
+      .mini-widget-wrap:hover .mini-tooltip {
+        opacity: 1; transform: translateX(-50%) scale(1) translateY(0);
+      }
+      .mini-count {
+        position: absolute; top: -3px; right: -3px;
+        min-width: 18px; height: 18px;
+        background: rgba(0, 229, 255, 0.18);
+        border: 1.5px solid rgba(0, 229, 255, 0.7);
+        color: #00e5ff; font-weight: 900; font-size: 9px;
+        padding: 0 4px; border-radius: 999px;
+        box-shadow: 0 0 10px rgba(0, 229, 255, 0.5), inset 0 1px 0 rgba(255,255,255,0.12);
+        pointer-events: none;
+        font-family: system-ui, sans-serif;
+        display: flex; align-items: center; justify-content: center;
+        z-index: 12;
+        backdrop-filter: blur(6px);
+      }
+      .mini-count.pulse { animation: zh-badge-pulse 0.4s cubic-bezier(0.16,1,0.3,1); }
     `;
+
     shadow.appendChild(style);
 
     const panelWrap = document.createElement('div');
@@ -3357,14 +3448,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     header.innerHTML = `
       <div class="header-left">
         <div class="header-icon"><img src="${chrome.runtime.getURL('icon48.png')}" alt="ZH" onerror="this.style.display='none';this.parentNode.textContent='ZH'"></div>
-        <span class="header-title">ZHunter Images</span>
-        <span class="header-count" id="zh-img-count">0</span>
+        <div class="header-info">
+          <span class="header-title">ZHunter Images</span>
+          <span class="header-sub" id="zh-header-sub">Scanning page&hellip;</span>
+        </div>
       </div>
-      <button class="toggle-btn" id="zh-toggle-btn" title="Minimize" aria-label="Minimize panel">
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M7 2L3 5L7 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </button>
+      <div class="header-right">
+        <span class="header-count" id="zh-img-count">0</span>
+        <button class="toggle-btn" id="zh-toggle-btn" title="Minimize" aria-label="Minimize panel">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M9 3L6 6L9 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
     `;
     panel.appendChild(header);
 
@@ -3425,7 +3521,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     const saveWidgetState = () => {
       chrome.storage.local.set({ [WIDGET_STATE_KEY]: {
-        collapsed,
+        // Never save collapsed state — card always starts minimized on each page
         top: widgetPosition.top,
         bottom: widgetPosition.bottom,
         left: widgetPosition.left,
@@ -3464,6 +3560,57 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     };
     const SVG_CHEVRON_LEFT  = `<svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 2L3 5L7 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     const SVG_CHEVRON_RIGHT = `<svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 2L7 5L3 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    
+    // -- Render grid
+    function renderGrid() {
+      const b = shadow.getElementById('zh-img-body');
+      const subEl = shadow.getElementById('zh-header-sub');
+
+      if (!images.length) {
+        b.innerHTML = `
+          <div class="empty">
+            <span class="empty-icon">&#128444;</span>
+            No product images found<br>
+            <span style="font-size:9px;opacity:0.45">Navigate to a product page to scan</span>
+          </div>`;
+        countEl.textContent = '0';
+        if (subEl) subEl.textContent = 'No images found';
+        pulseMiniCount(0);
+        return;
+      }
+
+      countEl.textContent = images.length;
+      if (subEl) subEl.textContent = selected.size + ' of ' + images.length + ' selected';
+      pulseMiniCount(images.length);
+
+      const grid = document.createElement('div');
+      grid.className = 'grid';
+      images.forEach((url, i) => {
+        // Try to extract resolution from URL for badge label
+        const resMatch = url.match(/[_-](\d{3,5})x(\d{3,5})[_.]/);
+        const badge = resMatch ? (resMatch[1] + 'x' + resMatch[2]) : ('#' + (i + 1));
+
+        const wrap = document.createElement('div');
+        wrap.className = 'img-wrap' + (selected.has(i) ? ' selected' : '');
+        wrap.innerHTML =
+          '<img src="' + url + '" loading="lazy" alt="img ' + (i+1) + '" title="' + url + '"' +
+          ' onerror="this.style.opacity=\'0.15\'">' +
+          '<div class="img-check"></div>' +
+          '<div class="img-idx">' + badge + '</div>';
+        wrap.addEventListener('click', () => {
+          if (selected.has(i)) selected.delete(i);
+          else selected.add(i);
+          wrap.classList.toggle('selected', selected.has(i));
+          if (subEl) subEl.textContent = selected.size + ' of ' + images.length + ' selected';
+          updateDlBtn();
+        });
+        grid.appendChild(wrap);
+      });
+      b.innerHTML = '';
+      b.appendChild(grid);
+      updateDlBtn();
+    }
+
     const applyCollapsedState = () => {
       panelWrap.classList.toggle('collapsed', collapsed);
       miniWrap.style.display = collapsed ? 'flex' : 'none';
@@ -3474,6 +3621,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     };
     const setCollapsed = value => {
       collapsed = !!value;
+      // When minimizing, always snap back to bottom-right corner
+      if (collapsed) {
+        widgetPosition = { top: null, bottom: 20, left: null, right: 20 };
+      }
       applyCollapsedState();
       saveWidgetState();
     };
@@ -3509,46 +3660,56 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     header.addEventListener('pointerdown', event => {
       if (event.target !== toggleBtn) beginDrag(event, header);
     });
-    // Drag on the whole wrap, but only start on the FAB button or ring
-    miniWrap.addEventListener('pointerdown', event => beginDrag(event, miniWrap));
-    window.addEventListener('pointermove', moveDrag, { passive: false });
-    window.addEventListener('pointerup', endDrag);
-    window.addEventListener('pointercancel', endDrag);
-    toggleBtn.addEventListener('click', event => {
-      event.stopPropagation();
-      setCollapsed(!collapsed);
+    // Mini widget: simple click to open, drag only on the panel header
+    miniWrap.addEventListener('pointermove', event => {
+      if (!dragging) return;
+      const nextLeft = event.clientX - dragOffset.x;
+      const nextTop  = event.clientY - dragOffset.y;
+      if (Math.abs(event.clientX - dragOrigin.x) > 3 || Math.abs(event.clientY - dragOrigin.y) > 3) dragMoved = true;
+      widgetPosition.left   = Math.max(8, Math.min(nextLeft, window.innerWidth  - 60 - 8));
+      widgetPosition.top    = Math.max(8, Math.min(nextTop,  window.innerHeight - 60 - 8));
+      widgetPosition.bottom = null;
+      widgetPosition.right  = null;
+      applyWidgetPosition();
+    });
+    miniWrap.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      const rect = root.getBoundingClientRect();
+      dragging = true;
+      dragMoved = false;
+      dragOrigin = { x: event.clientX, y: event.clientY };
+      dragOffset = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      miniWrap.setPointerCapture?.(event.pointerId);
     });
     miniWrap.addEventListener('pointerup', event => {
       const wasDragged = dragMoved;
-      endDrag();
-      event.preventDefault();
-      event.stopPropagation();
-      if (!wasDragged) setCollapsed(false);
+      dragging = false;
       dragMoved = false;
+      document.body.style.userSelect = '';
+      saveWidgetState();
+      if (!wasDragged) {
+        // Pure click — open the card
+        setCollapsed(false);
+      }
     });
     miniWrap.addEventListener('click', event => {
-      // Pointer-up owns restoration. Cancel the browser-generated click so a
-      // drag can never reopen the full card after the pointer is released.
-      event.preventDefault();
       event.stopPropagation();
     });
+    // Minimize button (chevron) in card header
+    toggleBtn.addEventListener('click', event => {
+      event.stopPropagation();
+      setCollapsed(true);
+    });
+    // Header click also collapses (except on the toggle button itself)
+    header.addEventListener('click', event => {
+      if (event.target === toggleBtn || toggleBtn.contains(event.target)) return;
+      setCollapsed(true);
+    });
+
+    // Every new page: always start minimized at bottom-right — no state restore
+    collapsed = true;
+    widgetPosition = { top: null, bottom: 20, left: null, right: 20 };
     applyCollapsedState();
-    chrome.storage.local.get(WIDGET_STATE_KEY).then(result => {
-      const saved = result?.[WIDGET_STATE_KEY];
-      if (!saved || typeof saved !== 'object') {
-        widgetPosition = { top: null, bottom: 20, left: null, right: 20 };
-        applyCollapsedState();
-        return;
-      }
-      collapsed = true; // position is restored, open/closed state is not
-      widgetPosition = {
-        top: Number.isFinite(saved.top) ? saved.top : null,
-        bottom: Number.isFinite(saved.bottom) ? saved.bottom : (Number.isFinite(saved.top) ? null : 20),
-        left: Number.isFinite(saved.left) ? saved.left : null,
-        right: Number.isFinite(saved.right) ? saved.right : (Number.isFinite(saved.left) ? null : 20)
-      };
-      applyCollapsedState();
-    }).catch(() => {});
 
     // ── Render grid
     function renderGrid() {

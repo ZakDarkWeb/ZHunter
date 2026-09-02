@@ -12,7 +12,7 @@
     <div class="brand-logo-wrap"><div class="brand-logo-glow"></div><img src="icon48.png" alt="" class="brand-logo-img" data-onerror="hide" /></div>
     <div class="brand-text">
       <div class="brand-name-row"><span class="brand-name">ZHunter</span><span class="brand-pro">PRO</span></div>
-      <div class="brand-meta"><span class="brand-version" data-version>v8.3.4</span><span class="brand-sub">Ultimate Product Hunter</span></div>
+      <div class="brand-meta"><span class="brand-version" data-version>v8.1.1</span><span class="brand-sub">Ultimate Product Hunter</span></div>
     </div>
     <div class="sp"></div>
     <span class="stat-pill" title="Products in Library"><svg class="i" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></svg><span id="totalCount">0</span></span>
@@ -42,6 +42,14 @@
           <button id="imgRefreshBtn" class="btn btn-ghost btn-xs" type="button" title="Re-scan page"><svg class="i" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.5-6.4L21 8M3 4v4h4M21 12a9 9 0 0 1-15.5 6.4L3 16M21 20v-4h-4"/></svg></button>
         </div>
       </div>
+      <!-- ── Role filter chips (v9) ── -->
+      <div class="role-filter-bar" id="roleFilterBar">
+        <button class="role-chip active" data-role="all" type="button">All</button>
+        <button class="role-chip" data-role="hero" type="button">Hero</button>
+        <button class="role-chip" data-role="gallery" type="button">Gallery</button>
+        <button class="role-chip" data-role="variant" type="button">Variant</button>
+        <button class="role-chip" data-role="lifestyle" type="button">Lifestyle</button>
+      </div>
       <button id="imgHuntBtn" class="hunt-row rainbow" type="button">
         <span class="hunt-row-ico"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></span>
         <span class="hunt-row-text"><b class="img-hunt-title">Hunt images</b><span class="img-hunt-sub">Collect every product image on this page</span></span>
@@ -60,6 +68,10 @@
           <option value="png">PNG</option>
           <option value="jpg" selected>JPG</option>
         </select>
+        <button id="imgCopyUrlsBtn" class="btn btn-ghost" type="button" title="Copy selected image URLs to clipboard">
+          <svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy URLs
+        </button>
         <button id="imgDownloadBtn" class="btn btn-primary" type="button"><svg class="i" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg> Download selected</button>
       </div>
       <div id="imgStatusBar" class="status-inline"></div>
@@ -179,6 +191,8 @@
               <div class="mh">Sheet</div>
               <button id="queueExportXlsxBtn" type="button" disabled>XLSX</button>
               <button id="queueExportCsvBtn" type="button" disabled>CSV</button>
+              <div class="mh">Research</div>
+              <button id="queueExportWorkbookBtn" class="workbook-btn" type="button" disabled>Research Workbook <span class="menu-item-badge">NEW</span></button>
               <div class="mh">Catalog</div>
               <button id="queueExportHtmlBtn" type="button" disabled>HTML</button>
               <button id="queueExportPdfBtn" type="button" disabled>PDF</button>
@@ -231,6 +245,8 @@
               <button id="masterDlXlsxBtn" type="button" disabled>XLSX</button>
               <button id="masterDlCsvBtn" type="button" disabled>CSV</button>
               <button id="masterCopyTsvBtn" type="button" disabled>Copy for Google Sheets</button>
+              <div class="mh">Research</div>
+              <button id="masterDlWorkbookBtn" class="workbook-btn" type="button" disabled>Research Workbook <span class="menu-item-badge">NEW</span></button>
               <div class="mh">Catalog</div>
               <button id="masterDlHtmlBtn" type="button" disabled>HTML</button>
               <button id="masterDlPdfBtn" type="button" disabled>PDF</button>
@@ -270,7 +286,7 @@
       <div class="set">
         <div class="it"><div class="l"><b>All settings, data backup, shortcuts</b><span>Opens the full settings page</span></div><button class="btn btn-ghost btn-xs" type="button" id="settingsOpenFullBtn">Open</button></div>
       </div>
-      <p class="hint">ZHunter <span data-version>v8.3.4</span> · Everything stays on this computer.</p>
+      <p class="hint">ZHunter <span data-version>v8.1.1</span> · Everything stays on this computer.</p>
     </div>
   </section>
 
@@ -478,40 +494,70 @@
 
         <!-- Result summary (hidden during run) -->
         <div id="bulkResultSummary" class="bulk-result-summary hidden">
+
+          <!-- Success Banner -->
+          <div class="bulk-success-banner">
+            <span class="bulk-success-icon">✦</span>
+            <div class="bulk-success-text">
+              <span class="bulk-success-title" id="bulkSuccessTitle">Hunt Complete</span>
+              <span class="bulk-success-sub" id="bulkResultMeta"></span>
+            </div>
+          </div>
+
+          <!-- Stat Cards -->
           <div class="bulk-result-stats">
             <div class="bulk-rs-item ok">
+              <div class="bulk-rs-icon">✓</div>
               <div class="bulk-rs-num" id="bulkRsOk">0</div>
               <div class="bulk-rs-lbl">Successful</div>
             </div>
             <div class="bulk-rs-item partial">
+              <div class="bulk-rs-icon">◑</div>
               <div class="bulk-rs-num" id="bulkRsPartial">0</div>
               <div class="bulk-rs-lbl">Partial</div>
             </div>
             <div class="bulk-rs-item fail">
+              <div class="bulk-rs-icon">✕</div>
               <div class="bulk-rs-num" id="bulkRsFail">0</div>
               <div class="bulk-rs-lbl">Failed</div>
             </div>
           </div>
-          <div class="bulk-result-meta" id="bulkResultMeta"></div>
+
           <!-- Failed tabs detail (hidden if none) -->
           <div id="bulkFailedDetail" class="bulk-failed-detail hidden">
             <button class="bulk-failed-toggle" id="bulkFailedToggle" type="button">Show failed tabs</button>
             <div id="bulkFailedList" class="bulk-failed-list hidden"></div>
           </div>
 
+          <!-- Download Actions -->
           <div class="bulk-result-actions">
             <button id="bulkDlZipBtn" class="bulk-dl-btn primary rainbow" type="button">
-              <span class="bulk-dl-icon"></span>
-              <span class="bulk-dl-text">Download Master ZIP</span>
-              <span class="bulk-dl-sub">sheet + one folder per product with images</span>
+              <span class="bulk-dl-icon-vis">🗜️</span>
+              <div class="bulk-dl-content">
+                <span class="bulk-dl-text">Download Master ZIP</span>
+                <span class="bulk-dl-sub">Sheet + images folder per product</span>
+              </div>
+              <span class="bulk-dl-arrow">→</span>
             </button>
             <div class="bulk-dl-grid">
-              <button id="bulkDlXlsxBtn" class="bulk-dl-btn" type="button"><span class="bulk-dl-icon"></span><span class="bulk-dl-text">Sheet only</span><span class="bulk-dl-sub">XLSX</span></button>
-              <button id="bulkDlPdfBtn" class="bulk-dl-btn" type="button"><span class="bulk-dl-icon"></span><span class="bulk-dl-text">PDF catalog</span><span class="bulk-dl-sub">printable</span></button>
-              <button id="bulkZipBtn" class="bulk-dl-btn" type="button"><span class="bulk-dl-icon"></span><span class="bulk-dl-text">Images only</span><span class="bulk-dl-sub">one ZIP</span></button>
-              <button id="bulkDlSeqBtn" class="bulk-dl-btn" type="button"><span class="bulk-dl-icon"></span><span class="bulk-dl-text">Images only</span><span class="bulk-dl-sub">separate files</span></button>
+              <button id="bulkDlXlsxBtn" class="bulk-dl-btn" type="button">
+                <span class="bulk-dl-icon-vis">📊</span>
+                <div class="bulk-dl-content"><span class="bulk-dl-text">Sheet only</span><span class="bulk-dl-sub">XLSX</span></div>
+              </button>
+              <button id="bulkDlPdfBtn" class="bulk-dl-btn" type="button">
+                <span class="bulk-dl-icon-vis">📄</span>
+                <div class="bulk-dl-content"><span class="bulk-dl-text">PDF Catalog</span><span class="bulk-dl-sub">Printable</span></div>
+              </button>
+              <button id="bulkZipBtn" class="bulk-dl-btn" type="button">
+                <span class="bulk-dl-icon-vis">🖼️</span>
+                <div class="bulk-dl-content"><span class="bulk-dl-text">Images ZIP</span><span class="bulk-dl-sub">One archive</span></div>
+              </button>
+              <button id="bulkDlSeqBtn" class="bulk-dl-btn" type="button">
+                <span class="bulk-dl-icon-vis">📁</span>
+                <div class="bulk-dl-content"><span class="bulk-dl-text">Images only</span><span class="bulk-dl-sub">Separate files</span></div>
+              </button>
             </div>
-            <button id="bulkResultDoneBtn" class="btn btn-ghost" type="button" style="width:100%;margin-top:4px">Done</button>
+            <button id="bulkResultDoneBtn" class="bulk-done-btn" type="button">Done</button>
           </div>
         </div>
       </div>
@@ -528,6 +574,9 @@
   <script src="lib/xlsx-js-style.min.js"></script>
   <script src="lib/jszip.min.js"></script>
   <script src="lib/mux-mp4.min.js"></script>
+  <script src="image-classifier.js"></script>
+  <script src="export-engine.js"></script>
+  <script src="queue-engine.js"></script>
   <script src="sidepanel.js"></script>
   <script src="sidepanel-shell.js"></script>
 </body>

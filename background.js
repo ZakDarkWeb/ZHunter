@@ -31,6 +31,7 @@ function bgDetectPlatform(url) {
   } catch { return null; }
 }
 
+// MIRRORED in content.js — keep values in sync (no bundler in MV3).
 const IMG_CAP = 15;
 const VID_CAP = 12;
 
@@ -42,7 +43,8 @@ const PUBLIC_SETTING_KEYS = new Set([
   'lastFolder', 'bulkFilenamePrefix', 'autoSkipDuplicates', 'bulkAutoCloseTabs',
   'imageFormat', 'imageRatio', 'imageBg', 'imageMinSize', 'imageMax5MB',
   'bulkQueueAutoCapture', 'bulkSheetColumns', 'customBulkColumns',
-  'productSheetColumns', 'customProductColumns', 'migratedToOriginal_2'
+  'productSheetColumns', 'customProductColumns'
+  // migratedToOriginal_2 removed — migration complete, no longer needed in public keys
 ]);
 
 const FETCH_CONCURRENCY = 8;   // was 16 — moderate concurrency to prevent network congestion
@@ -56,8 +58,10 @@ const AI_TIMEOUT_MS     = 28000;
 let _writeLock = Promise.resolve();
 function withWriteLock(fn) {
   const result = _writeLock.then(fn);
+  // FIX BUG 4: Preserve errors on the chain so they don't block future locks,
+  // but still rethrow to the caller so the UI is not left hanging.
   _writeLock = result.catch(() => {});
-  return result;
+  return result; // caller receives the real rejection, not a silently-swallowed one
 }
 
 // ── Service Worker Keepalive ─────────────────────────────────
@@ -162,7 +166,7 @@ const DEFAULT_DATA = {
   links:   [],
   folders: ['General', 'Favorites', 'Read Later'],
   tags:    ['Important', 'Unread', 'To Buy', 'Reference', 'Watch Later'],
-  history: [],
+  // history[] removed — was never rendered in any UI panel; only wasted storage writes.
   settings: {
     autoCategory:        true,
     duplicateCheck:      true,
@@ -179,10 +183,10 @@ const DEFAULT_DATA = {
     imageMax5MB:         true,
     bulkSheetColumns: {
       no: true,           title: true,        url: true,
-      platform: true,     price: true,        labelCost: true,
-      listPrice: true,    profit: true,       description: true,
-      tags: false,        variants: false,    imageCount: true,
-      videoCount: false,  scrapedAt: true,    status: false,
+      platform: false,    price: true,        labelCost: false,
+      listPrice: false,   profit: false,      description: false,
+      tags: false,        variants: false,    imageCount: false,
+      videoCount: false,  scrapedAt: false,   status: false,
       // Image URL columns — OFF by default; user must enable in Settings → Columns
       img1: false,  img2: false,  img3: false,  img4: false,  img5: false,
       img6: false,  img7: false,  img8: false,  img9: false,  img10: false,
@@ -244,22 +248,13 @@ async function getData() {
         ? stored.settings.customProductColumns
         : [...DEFAULT_DATA.settings.customProductColumns]
     };
-    
-    // Auto-migrate old defaults to the new "Original" values
-    if (!settings.migratedToOriginal_2) {
-      settings.imageFormat = 'jpg';
-      settings.imageRatio = 'original';
-      settings.imageBg = 'original';
-      settings.imageMinSize = 0;
-      settings.migratedToOriginal_2 = true;
-      await chrome.storage.local.set({ [STORAGE_KEY]: { ...stored, settings } });
-    }
+    // migratedToOriginal_2 flag removed — all existing installs have already migrated.
+    // The defaults in DEFAULT_DATA.settings enforce the correct values on every load.
 
     return {
       links:    Array.isArray(stored.links)   ? stored.links   : [],
       folders:  Array.isArray(stored.folders) ? stored.folders : DEFAULT_DATA.folders,
       tags:     Array.isArray(stored.tags)    ? stored.tags    : DEFAULT_DATA.tags,
-      history:  Array.isArray(stored.history) ? stored.history : [],
       settings
     };
   } catch (_) {
@@ -312,23 +307,10 @@ async function mutateLink(id, mutator) {
 }
 
 // ── Badge ────────────────────────────────────────────────────
+// v8.1.1: Badge permanently disabled — no counter on icon
 async function updateBadge(count, badgeEnabled) {
   try {
-    if (badgeEnabled === undefined || count === undefined) {
-      const d = await getData();
-      badgeEnabled = d.settings.badgeEnabled;
-      // Badge = products in the Library (master sheet).
-      const m = await chrome.storage.local.get('zhunterMasterSheet');
-      count = Array.isArray(m.zhunterMasterSheet) ? m.zhunterMasterSheet.length : 0;
-    }
-    await chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR });
-    if (!badgeEnabled) {
-      await chrome.action.setBadgeText({ text: '' });
-      return;
-    }
-    const n = typeof count === 'number' ? count : 0;
-    const text = n > 99 ? '99+' : n > 0 ? String(n) : '';
-    await chrome.action.setBadgeText({ text });
+    await chrome.action.setBadgeText({ text: '' });
   } catch (_) {}
 }
 
@@ -342,6 +324,10 @@ async function flashBadgeSuccess() {
 }
 
 // ── Utilities ────────────────────────────────────────────────
+// MIRRORED: detectCategory, isValidURL, getFavicon are intentionally repeated in sidepanel.js.
+// IMG_CAP / VID_CAP are intentionally repeated in content.js.
+// MV3 runs each context (service worker, extension page, content script) in isolation —
+// a shared module is not possible without a bundler. Keep values in sync if they change.
 function detectCategory(url) {
   try {
     const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
@@ -655,20 +641,12 @@ async function addLink({
     price:            sanitizeText(price),
     videoUrl:         typeof videoUrl === 'string' ? videoUrl : '',
     videos:           validVideos,
-    visited:          false,
-    visitCount:       0,
+    // visited / visitCount removed — zero UI references, wasted storage per link
     enrichmentStatus: enrichmentStatus || (validImages.length === 0 && validImageUrls.length > 0 ? 'pending' : '')
   };
 
   data.links.unshift(newLink);
-  data.history.unshift({
-    id:   generateId(),
-    type: 'add',
-    text: `Saved: ${newLink.title.substring(0, 50)}`,
-    date: new Date().toISOString()
-  });
-  data.history = data.history.slice(0, 200);
-
+  // history[] writes removed — array was never rendered in any UI panel
   await saveData(data);
   return { success: true, link: newLink };
 }
@@ -853,8 +831,10 @@ async function addBulkQueueItems(items) {
     if (!url || !isSupportedProductUrl(url)) { rejected.push({ url: raw?.url || '', reason: 'unsupported_url' }); continue; }
     if (seen.has(url)) { duplicates++; continue; }
     seen.add(url);
+    // FIX BUG 8: preserve `source` field so the queue UI column is not always blank
     added.push({ id: `q_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, url, title: sanitizeText(raw?.title || url),
-      platform: bgDetectPlatform(url), addedAt: Date.now(), checked: true, status: 'queued', attempts: 0, error: '' });
+      platform: bgDetectPlatform(url), addedAt: Date.now(), checked: true, status: 'queued', attempts: 0, error: '',
+      source: sanitizeText(raw?.source || 'manual').slice(0, 40), hunted: false });
   }
   const nextQueue = [...queue, ...added].slice(-2000);
   await chrome.storage.local.set({ [BULK_QUEUE_KEY]: nextQueue });
@@ -945,7 +925,7 @@ async function saveAllTabs(folder = 'General', tags = []) {
       images:           [], imageUrls: [],
       dateAdded:        nowIso, dateModified: nowIso,
       notes:            '', price: '', videoUrl: '', videos: [],
-      visited:          false, visitCount: 0, enrichmentStatus: ''
+      enrichmentStatus: ''
     };
     data.links.unshift(newLink);
     results.push({ url: tab.url, success: true, link: newLink });
@@ -953,12 +933,6 @@ async function saveAllTabs(folder = 'General', tags = []) {
   }
 
   if (anyAdded) {
-    data.history.unshift({
-      id: generateId(), type: 'save_tabs',
-      text: `Saved ${results.filter(r => r.success).length} tabs`,
-      date: nowIso
-    });
-    data.history = data.history.slice(0, 200);
     await saveData(data);
   }
   return { success: true, results };
@@ -1175,8 +1149,6 @@ async function handleMessage(msg, sender) {
       const data = await getData();
       data.links = [];
       await chrome.storage.local.remove(['zhunterMasterSheet', 'zhunterMasterBatches']);
-      data.history.unshift({ id: generateId(), type: 'clear', text: 'Cleared all saved products', date: new Date().toISOString() });
-      data.history = data.history.slice(0, 200);
       await saveData(data);
       await clearIndexedDBImages();
       return { success: true };
@@ -1188,19 +1160,7 @@ async function handleMessage(msg, sender) {
       await saveData(data);
       return { success: true, settings: getPublicSettings(data.settings) };
     });
-    case 'LOG_ACTION':         return await withWriteLock(async () => {
-      const data = await getData();
-      data.history.unshift({ id: generateId(), type: msg.type || 'info', text: sanitizeText(msg.text), date: new Date().toISOString() });
-      data.history = data.history.slice(0, 200);
-      await saveData(data);
-      return { success: true };
-    });
-    case 'CLEAR_HISTORY':      return await withWriteLock(async () => {
-      const data = await getData();
-      data.history = [];
-      await saveData(data);
-      return { success: true };
-    });
+    // LOG_ACTION / CLEAR_HISTORY removed — history[] array was dead code (no UI renderer)
     case 'ADD_IMAGE_TO_LINK':  return await withWriteLock(async () => {
       const data = await getData();
       const idx = data.links.findIndex(l => l.id === msg.id);
@@ -1208,13 +1168,14 @@ async function handleMessage(msg, sender) {
       const link = data.links[idx];
       const images = Array.isArray(link.images) ? [...link.images] : [];
       const imageUrls = Array.isArray(link.imageUrls) ? [...link.imageUrls] : [];
-      if (images.length >= IMG_CAP) return { success: false, reason: 'max_images' };
+      if (imageUrls.length >= IMG_CAP) return { success: false, reason: 'max_images' };
       if (typeof msg.image === 'string' && isValidURL(msg.image)) {
-        images.push(msg.image);
+        // FIX BUG 3: images[] holds base64 blobs only; raw URLs go into imageUrls[] only.
+        // Pushing the raw URL into images[] corrupted export ZIPs and broke image grids.
         imageUrls.push(msg.image);
-        data.links[idx] = { ...link, images, imageUrls, dateModified: new Date().toISOString() };
+        data.links[idx] = { ...link, images, imageUrls, enrichmentStatus: 'pending', dateModified: new Date().toISOString() };
         await saveData(data);
-        return { success: true, images };
+        return { success: true, imageUrls };
       }
       return { success: false, reason: 'invalid_image' };
     });
@@ -1362,6 +1323,27 @@ chrome.runtime.onInstalled.addListener(async () => {
       data.settings.bulkSheetColumns = JSON.parse(JSON.stringify(DEFAULT_DATA.settings.bulkSheetColumns));
       migrated = true;
     }
+    // v8.1.1: Force-reset columns that were ON by old default but should be OFF now.
+    // This permanently fixes extra columns for existing users without needing manual reset.
+    {
+      const forceOff = ['listPrice', 'labelCost', 'profit', 'description', 'imageCount', 'scrapedAt', 'platform'];
+      let colChanged = false;
+      forceOff.forEach(key => {
+        if (data.settings.bulkSheetColumns[key] === true) {
+          data.settings.bulkSheetColumns[key] = false;
+          colChanged = true;
+        }
+      });
+      // Also ensure the 5 default columns are ON
+      const forceOn = ['no', 'title', 'url', 'price'];
+      forceOn.forEach(key => {
+        if (data.settings.bulkSheetColumns[key] !== true) {
+          data.settings.bulkSheetColumns[key] = true;
+          colChanged = true;
+        }
+      });
+      if (colChanged) migrated = true;
+    }
     if (!data.settings.productSheetColumns) {
       data.settings.productSheetColumns = JSON.parse(JSON.stringify(DEFAULT_DATA.settings.productSheetColumns));
       migrated = true;
@@ -1382,11 +1364,7 @@ chrome.runtime.onInstalled.addListener(async () => {
     if (migrated) await saveData(data);
   }
 
-  const migFlag = await chrome.storage.local.get('zhunter_v76_migrated');
-  if (!migFlag.zhunter_v76_migrated) {
-    await chrome.storage.local.remove(['zhunterMasterSheet', 'zhunterMasterBatches']);
-    await chrome.storage.local.set({ zhunter_v76_migrated: true });
-  }
+  // zhunter_v76_migrated flag removed — all existing installs completed this migration long ago.
 
   setupContextMenus();
   await updateBadge();
@@ -1441,16 +1419,26 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (settings.bulkQueueAutoCapture !== true) return; // v8: off unless the user turns it on
 
   const queue = stored[BULK_QUEUE_KEY] || [];
-  const normUrl = url.split('#')[0].trim();
-  if (queue.some(i => i.url === normUrl)) return; // already queued
+  // FIX BUG 1: Use normalizeQueueUrl() so tracking params (utm_, gclid, etc.) are stripped
+  // before duplicate check — prevents adding the same product URL twice with different params.
+  const normUrl = normalizeQueueUrl(url);
+  if (!normUrl || !isSupportedProductUrl(normUrl)) return;
+  if (queue.some(i => normalizeQueueUrl(i?.url || '') === normUrl)) return; // already queued
 
+  // FIX BUG 2: Include all required queue item fields so the UI renders the item correctly.
+  // Without status/attempts/error/hunted, the queue row has no status badge and retry breaks.
   const newItem = {
-    id:        `q_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-    url:       normUrl,
-    title:     tab.title || normUrl,
-    platform:  bgDetectPlatform(normUrl),
-    addedAt:   Date.now(),
-    checked:   true
+    id:       `q_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    url:      normUrl,
+    title:    sanitizeText(tab.title || normUrl),
+    platform: bgDetectPlatform(normUrl),
+    addedAt:  Date.now(),
+    checked:  true,
+    status:   'queued',
+    attempts: 0,
+    error:    '',
+    hunted:   false,
+    source:   'auto_capture'  // FIX BUG 8: source field populated so UI column is not blank
   };
   queue.push(newItem);
   // Keep queue from growing unbounded
