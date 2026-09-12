@@ -225,23 +225,32 @@ function getFav(url) {
 
 // ── Ripple Effect ────────────────────────────────────────────
 function addRipple(btn) {
+  if (btn.classList.contains('hdr-btn')) return;
   btn.addEventListener('click', function (e) {
+    if (this.querySelector('.ripple')) return;
     const ripple = document.createElement('span');
     ripple.className = 'ripple';
     const rect = this.getBoundingClientRect();
-    const size = Math.max(rect.width, rect.height);
+    const size = Math.max(rect.width, rect.height) * 2;
     ripple.style.cssText = `
-      width:${size}px; height:${size}px;
-      left:${e.clientX - rect.left - size / 2}px;
-      top:${e.clientY - rect.top - size / 2}px;
+      position: absolute;
+      pointer-events: none;
+      border-radius: 50%;
+      width: ${size}px;
+      height: ${size}px;
+      left: ${e.clientX - rect.left - size / 2}px;
+      top: ${e.clientY - rect.top - size / 2}px;
+      background: rgba(0, 229, 255, 0.22);
+      transform: scale(0);
+      animation: zh-ripple-anim 0.5s ease-out;
     `;
     this.appendChild(ripple);
-    setTimeout(() => ripple.remove(), 600);
+    setTimeout(() => ripple.remove(), 500);
   });
 }
 
 function applyRipples() {
-  document.querySelectorAll('.btn, .btn-hunt-main, .btn-ai-magic, .quick-btn, .hdr-btn')
+  document.querySelectorAll('.btn:not(.hdr-btn), .btn-hunt-main, .btn-ai-magic, .quick-btn')
     .forEach(addRipple);
 }
 
@@ -701,6 +710,7 @@ function renderAll() {
   renderTagsManage();
   renderTagsPicker('tagsSelector', State.selectedTags);
   syncFolderSelect('folderSelect');
+  if (typeof syncBulkFolderSelect === 'function') syncBulkFolderSelect();
   syncFilterDropdowns();
   updateExportStats();
   syncViewButtons();
@@ -3026,7 +3036,7 @@ function toast(message, type = 'info') {
 // ── Header Buttons ────────────────────────────────────────────
 function initHeaderButtons() {
   $('settingsBtn')?.addEventListener('click', () => {
-    chrome.runtime.openOptionsPage();
+    $('tab-btn-settings')?.click();
   });
 }
 
@@ -3254,15 +3264,80 @@ const BulkState = {
   results:     [],   // [{tabId, status, data, error}]
   currentBatchId: null,
   huntStartTime:  null, // for live speed/ETA stats
+  speedMode:   localStorage.getItem('zhunter_bulk_speed') || 'safe',
+  targetFolder: 'General',
 
-  // Tunables — maximum speed pipeline
-  PARALLEL:    14,   // 14 concurrent workers
-  CHUNK_SIZE:  40,   // 40 tabs per chunk
-  TAB_TIMEOUT: 4000, // 4s per tab — fail fast, fallback is instant
-  CHUNK_PAUSE: 200,  // 0.2s between chunks
-  MAX_RETRIES: 1,    // 1 retry
-  AUTO_CLOSE_TABS: true // close each tab immediately after successful scrape
+  // Tunables — balanced speed/reliability pipeline
+  PARALLEL:    10,    // concurrent workers (14 starved slow SPAs of CPU and caused false timeouts)
+  CHUNK_SIZE:  40,
+  TAB_TIMEOUT: 8000,  // first SCRAPE_PAGE attempt; heavy pages need >4s to hydrate
+  TAB_TIMEOUT_RETRY: 15000, // after a refresh the page starts cold, allow more
+  ITEM_HARD_LIMIT: 90000,   // absolute cap per tab so one frozen tab can never wedge the hunt
+  CHUNK_PAUSE: 200,
+  MAX_RETRIES: 1,
+  AUTO_CLOSE_TABS: true,
+  consecutiveFailures: 0    // adaptive backoff when a site starts blocking us
 };
+
+function setBulkSpeedMode(mode) {
+  BulkState.speedMode = mode === 'turbo' ? 'turbo' : 'safe';
+  try { localStorage.setItem('zhunter_bulk_speed', BulkState.speedMode); } catch (_) {}
+  document.querySelectorAll('.speed-pill-group').forEach(group => {
+    group.querySelectorAll('.speed-pill').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.speed === BulkState.speedMode);
+    });
+  });
+  if (BulkState.speedMode === 'turbo') {
+    BulkState.PARALLEL = 12;
+    BulkState.CHUNK_PAUSE = 100;
+  } else {
+    BulkState.PARALLEL = 5;
+    BulkState.CHUNK_PAUSE = 800;
+  }
+  updateBulkSummary();
+  updateQueueSummary();
+}
+
+function syncBulkFolderSelect() {
+  const sel = $('bulkFolderSelect');
+  if (!sel) return;
+  const current = sel.value || BulkState.targetFolder || 'General';
+  sel.innerHTML = '';
+  const folders = Array.isArray(State.data?.folders) && State.data.folders.length ? State.data.folders : ['General'];
+  folders.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = f;
+    opt.textContent = f;
+    if (f === current) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  BulkState.targetFolder = sel.value || 'General';
+}
+
+// Resolves when the hunt is not paused (or has been cancelled).
+async function waitWhileBulkPaused() {
+  while (BulkState.isPaused && !BulkState.isCancelled) await sleep(200);
+}
+
+// Wraps a scrape so a stuck tab (frozen renderer, hung dialog, never-ending
+// load) is recorded as 'fail' instead of blocking the worker forever.
+function withHardLimit(promise, ms, label) {
+  let timer;
+  const guard = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(label || 'hard_timeout')), ms); });
+  return Promise.race([promise, guard]).finally(() => clearTimeout(timer));
+}
+
+// Waits for a tab to finish loading. Returns the tab or null if it vanished.
+async function waitForTabComplete(tabId, maxMs) {
+  const deadline = Date.now() + maxMs;
+  let tab = null;
+  while (Date.now() < deadline && !BulkState.isCancelled) {
+    tab = await new Promise(r => { try { chrome.tabs.get(tabId, t => r(chrome.runtime.lastError ? null : t)); } catch (_) { r(null); } });
+    if (!tab || tab.status === 'complete') return tab;
+    await sleep(250);
+  }
+  return tab;
+}
 
 const HUNT_STATE_KEY = 'zhunterHuntState'; // for auto-resume
 
@@ -3360,6 +3435,17 @@ function initBulkTab() {
 
   // Queue view controls.
   $('queueAddBtn')?.addEventListener('click', onQueueAddUrl);
+  $('queuePasteClipboardBtn')?.addEventListener('click', onQueuePasteClipboard);
+  $('queueToggleListBtn')?.addEventListener('click', onQueueToggleList);
+  $('queueImportFileBtn')?.addEventListener('click', () => $('queueFileInput')?.click());
+  $('queueFileInput')?.addEventListener('change', e => {
+    const file = e.target.files?.[0];
+    if (file) onQueueImportFile(file);
+    e.target.value = '';
+  });
+  $('queueListTextarea')?.addEventListener('input', onQueueListInputChange);
+  $('queueListClearBtn')?.addEventListener('click', onQueueListClear);
+  $('queueListAddBtn')?.addEventListener('click', onQueueListAdd);
   $('queueAddInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') onQueueAddUrl(); });
   $('queueSelectAllBtn')?.addEventListener('click', () => toggleAllQueue(true));
   $('queueDeselectAllBtn')?.addEventListener('click', () => toggleAllQueue(false));
@@ -3369,6 +3455,25 @@ function initBulkTab() {
   $('queueSearchInput')?.addEventListener('input', e => { QueueState.search = e.target.value || ''; renderBulkQueueList(); });
   $('queueStatusFilter')?.addEventListener('change', e => { QueueState.statusFilter = e.target.value || 'all'; renderBulkQueueList(); });
   $('bulkQueueHuntBtn')?.addEventListener('click', startQueueHunt);
+
+  // Speed mode & folder controls
+  document.querySelectorAll('.speed-pill-group .speed-pill').forEach(btn => {
+    btn.addEventListener('click', () => setBulkSpeedMode(btn.dataset.speed));
+  });
+  $('bulkFolderSelect')?.addEventListener('change', e => {
+    BulkState.targetFolder = e.target.value;
+  });
+  document.querySelectorAll('#queueStoreFilterBar .store-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('#queueStoreFilterBar .store-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      QueueState.storeFilter = chip.dataset.store || 'all';
+      renderBulkQueueList();
+    });
+  });
+  setBulkSpeedMode(BulkState.speedMode);
+  syncBulkFolderSelect();
+
   $('queueExportXlsxBtn')?.addEventListener('click', () => downloadBatchSheet('xlsx'));
   $('queueExportCsvBtn')?.addEventListener('click', downloadQueueCsv);
   $('queueExportHtmlBtn')?.addEventListener('click', downloadBatchHtmlCatalog);
@@ -3432,7 +3537,7 @@ function switchBulkView(view = 'tabs') {
 // BULK QUEUE — persistent URL queue + sequential hunt
 // ══════════════════════════════════════════════════════════════
 
-const QueueState = { items: [], search: '', statusFilter: 'all' };
+const QueueState = { items: [], search: '', statusFilter: 'all', storeFilter: 'all' };
 
 async function loadBulkQueue() {
   try {
@@ -3447,11 +3552,22 @@ function renderBulkQueueList() {
   if (!list) return;
   const items = QueueState.items;
   const query = QueueState.search.trim().toLowerCase();
+  const storeFilter = (QueueState.storeFilter || 'all').toLowerCase();
   const filtered = items.filter(item => {
     const status = item.status || (item.hunted ? 'complete' : 'queued');
     const matchesStatus = QueueState.statusFilter === 'all' || status === QueueState.statusFilter;
     const haystack = `${item.title || ''} ${item.url || ''} ${item.platform || ''}`.toLowerCase();
-    return matchesStatus && (!query || haystack.includes(query));
+    let matchesStore = true;
+    if (storeFilter !== 'all') {
+      const plat = (typeof item.platform === 'string' ? item.platform : (item.platform?.name || '')).toLowerCase();
+      const urlLower = (item.url || '').toLowerCase();
+      if (storeFilter === 'other') {
+        matchesStore = !['amazon', 'walmart', 'aliexpress', 'temu', 'ebay'].some(s => plat.includes(s) || urlLower.includes(s));
+      } else {
+        matchesStore = plat.includes(storeFilter) || urlLower.includes(storeFilter);
+      }
+    }
+    return matchesStatus && matchesStore && (!query || haystack.includes(query));
   });
   if (items.length === 0 || filtered.length === 0) {
     list.innerHTML = items.length === 0
@@ -3495,7 +3611,7 @@ function renderBulkQueueList() {
       : '';
     row.innerHTML = `<div class="bulk-tab-checkbox"></div>${platLabel}<div class="bulk-tab-info">${heroImg}<div class="bulk-tab-platform-lbl">${esc(item.title ? trunc(item.title,50) : shortUrl)}${huntedBadge}</div><div class="bulk-tab-title">${esc(shortUrl)}</div>${stageBar}<div class="pq-stage-label">${stageLabel}</div>${item.error && (status === 'needs_retry' || status === 'error') ? `<div class="pq-error-msg">&#9888; ${esc(item.error)}</div>` : ''}</div>${retryButton}<button class="queue-remove-btn" data-id="${esc(item.id)}" title="Remove from queue">&#10005;</button>`;
     row.addEventListener('click', e => {
-      if (e.target.closest('.queue-remove-btn')) return;
+      if (e.target.closest('.queue-remove-btn, .queue-retry-btn')) return;
       item.checked = !item.checked;
       saveBulkQueue();
       renderBulkQueueList();
@@ -3527,7 +3643,13 @@ function updateQueueSummary() {
     : `${total} queued · ${checked} selected${failed ? ' · ' + failed + ' failed' : ''}`;
   if (eta) {
     if (checked === 0) eta.textContent = '';
-    else { const sec = checked * 8; const m = Math.floor(sec/60), s = sec%60; eta.textContent = '~' + (m ? m+'m ' : '') + s + 's'; }
+    else {
+      const speedMultiplier = BulkState.speedMode === 'turbo' ? 2.5 : 7.0;
+      const sec = Math.ceil(checked * speedMultiplier);
+      const m = Math.floor(sec / 60), s = sec % 60;
+      const speedTag = BulkState.speedMode === 'turbo' ? ' ⚡ Turbo' : ' 🛡️ Safe';
+      eta.textContent = `~${m ? m + 'm ' : ''}${s}s est.${speedTag}`;
+    }
   }
   if (btn) btn.disabled = (checked === 0 || BulkState.isHunting);
 }
@@ -3581,19 +3703,125 @@ function retryProblemQueueItems() {
   renderBulkQueueList();
 }
 
+async function addUrlsToBulkQueue(rawText, inputElement) {
+  const text = (rawText || '').trim();
+  if (!text) return;
+  const urlRegex = /https?:\/\/[^\s,"'<>()]+/gi;
+  let matches = text.match(urlRegex) || [];
+  if (matches.length === 0) {
+    try {
+      const fixed = new URL(text.startsWith('http') ? text : 'https://' + text).href;
+      matches = [fixed];
+    } catch (_) {}
+  }
+  if (matches.length === 0) {
+    toast('No valid product URLs found', 'err');
+    return;
+  }
+
+  const uniqueUrls = [...new Set(matches.map(u => u.split('#')[0]))];
+  let added = 0, duplicates = 0, errors = 0;
+
+  for (const normUrl of uniqueUrls) {
+    try {
+      const platform = detectTabPlatform(normUrl);
+      const res = await msg({ action: 'ADD_TO_BULK_QUEUE', url: normUrl, title: normUrl, platform: platform?.name || null });
+      if (res?.success) added++;
+      else if (res?.reason === 'duplicate') duplicates++;
+      else errors++;
+    } catch (_) {
+      errors++;
+    }
+  }
+
+  if (inputElement) inputElement.value = '';
+  await loadBulkQueue();
+
+  if (added > 0) {
+    const dupMsg = duplicates > 0 ? ` (${duplicates} duplicates skipped)` : '';
+    toast(`Added ${added} URL${added > 1 ? 's' : ''} to queue${dupMsg}`, 'ok');
+  } else if (duplicates > 0) {
+    toast(`${duplicates} URL${duplicates > 1 ? 's' : ''} already in queue`, 'warn');
+  } else {
+    toast('Failed to add URLs', 'err');
+  }
+}
+
 function onQueueAddUrl() {
   const input = $('queueAddInput');
-  const raw = (input?.value || '').trim();
-  if (!raw) return;
-  let normUrl;
-  try { normUrl = new URL(raw).href.split('#')[0]; } catch { toast('Invalid URL', 'err'); return; }
-  const platform = detectTabPlatform(normUrl);
-  msg({ action: 'ADD_TO_BULK_QUEUE', url: normUrl, title: normUrl, platform: platform?.name || null })
-    .then(res => {
-      if (res?.success) { if (input) input.value = ''; loadBulkQueue(); toast('Added to queue', 'ok'); }
-      else if (res?.reason === 'duplicate') toast('Already in queue', 'warn');
-      else toast('Failed to add URL', 'err');
-    }).catch(() => toast('Failed to add URL', 'err'));
+  addUrlsToBulkQueue(input?.value, input);
+}
+
+async function onQueuePasteClipboard() {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!text || !text.trim()) {
+      toast('Clipboard is empty', 'warn');
+      return;
+    }
+    const input = $('queueAddInput');
+    await addUrlsToBulkQueue(text, input);
+  } catch (err) {
+    toast('Clipboard access unavailable or empty', 'err');
+  }
+}
+
+function onQueueToggleList() {
+  const box = $('queueListContainer');
+  if (!box) return;
+  const isHidden = box.classList.toggle('hidden');
+  const btn = $('queueToggleListBtn');
+  if (btn) btn.classList.toggle('active', !isHidden);
+  if (!isHidden) {
+    $('queueListTextarea')?.focus();
+    onQueueListInputChange();
+  }
+}
+
+function onQueueListInputChange() {
+  const text = $('queueListTextarea')?.value || '';
+  const urlRegex = /https?:\/\/[^\s,"'<>()]+/gi;
+  const matches = text.match(urlRegex) || [];
+  const uniqueUrls = [...new Set(matches.map(u => u.split('#')[0]))];
+  const count = uniqueUrls.length;
+  const counter = $('queueListCounter');
+  if (counter) counter.textContent = count === 1 ? '1 link detected' : `${count} links detected`;
+  const addBtn = $('queueListAddBtn');
+  if (addBtn) {
+    addBtn.disabled = count === 0;
+    addBtn.textContent = count > 0 ? `Add ${count} Link${count > 1 ? 's' : ''}` : 'Add to Queue';
+  }
+}
+
+async function onQueueListAdd() {
+  const textarea = $('queueListTextarea');
+  const text = textarea?.value || '';
+  if (!text.trim()) return;
+  await addUrlsToBulkQueue(text, textarea);
+  $('queueListContainer')?.classList.add('hidden');
+  $('queueToggleListBtn')?.classList.remove('active');
+  onQueueListInputChange();
+}
+
+function onQueueListClear() {
+  const textarea = $('queueListTextarea');
+  if (textarea) textarea.value = '';
+  onQueueListInputChange();
+}
+
+function onQueueImportFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async e => {
+    const content = e.target?.result;
+    if (typeof content === 'string' && content.trim()) {
+      await addUrlsToBulkQueue(content);
+    } else {
+      toast('File is empty or could not be read', 'warn');
+    }
+  };
+  reader.onerror = () => toast('Error reading file', 'err');
+  reader.readAsText(file);
 }
 
 // ── Sequential queue hunt — one reusable inactive worker tab
@@ -3618,14 +3846,28 @@ async function closeQueueWorkerTab() {
   try { await chrome.tabs.remove(id); } catch (_) {}
 }
 
-async function waitForQueueTabReady(tabId, timeoutMs = 60000) {
+async function waitForQueueTabReady(tabId, timeoutMs = 60000, targetUrl = '') {
   const deadline = Date.now() + timeoutMs;
+  const targetHost = safeHost(targetUrl);
+  // Right after tabs.update() the tab still reports the PREVIOUS page as
+  // status:'complete'. Returning immediately scraped the wrong product, so we
+  // first wait for navigation to start (status 'loading' or URL change).
+  let sawNavigation = false;
+  const navDeadline = Date.now() + 4000;
   while (Date.now() < deadline && !BulkState.isCancelled) {
-    try {
-      const tab = await new Promise(resolve => chrome.tabs.get(tabId, t => resolve(chrome.runtime.lastError ? null : t)));
-      if (!tab) return false;
-      if (tab.status === 'complete') return true;
-    } catch (_) { return false; }
+    let tab = null;
+    try { tab = await new Promise(resolve => chrome.tabs.get(tabId, t => resolve(chrome.runtime.lastError ? null : t))); }
+    catch (_) { return false; }
+    if (!tab) return false;
+    const onTarget = !targetHost || safeHost(tab.url || tab.pendingUrl || '') === targetHost;
+    if (!sawNavigation) {
+      if (tab.status === 'loading' || (onTarget && tab.url && tab.url !== 'about:blank')) sawNavigation = true;
+      else if (Date.now() > navDeadline) sawNavigation = true; // give up waiting for the loading signal
+    }
+    if (sawNavigation && tab.status === 'complete' && onTarget) {
+      await sleep(400); // let late-hydrating SPAs paint before we inject
+      return true;
+    }
     await sleep(250);
   }
   return false;
@@ -3655,20 +3897,41 @@ async function scrapeQueueItem(queueItem, workerTabId) {
   try {
     await chrome.tabs.update(workerTabId, { url: queueItem.url, active: false });
     setBulkRowMeta(fakeId, 'Loading in background…');
-    const ready = await waitForQueueTabReady(workerTabId, 60000);
+    const ready = await waitForQueueTabReady(workerTabId, 60000, queueItem.url);
     if (!ready) throw new Error(BulkState.isCancelled ? 'cancelled' : 'page_timeout');
 
-    setBulkRowMeta(fakeId, 'Injecting…');
-    try { await chrome.scripting.executeScript({ target: { tabId: workerTabId }, files: ['content.js'] }); }
-    catch (_) { /* The script may already be present after navigation. */ }
-    await sleep(500);
-
-    setBulkRowMeta(fakeId, 'Scraping…');
-    scraped = await sendQueueScrape(workerTabId);
+    // Two attempts: the second one re-injects and nudges lazy SPAs to hydrate.
+    for (let attempt = 1; attempt <= 2 && !scraped; attempt++) {
+      await waitWhileBulkPaused();
+      if (BulkState.isCancelled) throw new Error('cancelled');
+      setBulkRowMeta(fakeId, attempt === 1 ? 'Injecting…' : 'Retrying…');
+      try { await chrome.scripting.executeScript({ target: { tabId: workerTabId }, files: ['content.js'] }); }
+      catch (_) { /* The script may already be present after navigation. */ }
+      if (attempt === 2) {
+        try {
+          await chrome.scripting.executeScript({ target: { tabId: workerTabId }, func: () => {
+            window.scrollTo(0, Math.min(1200, document.body.scrollHeight));
+            window.dispatchEvent(new Event('scroll')); window.dispatchEvent(new Event('resize'));
+          } });
+        } catch (_) {}
+        await sleep(BulkState.speedMode === 'turbo' ? 400 : 1500);
+      } else {
+        await sleep(BulkState.speedMode === 'turbo' ? 150 : 500);
+      }
+      setBulkRowMeta(fakeId, 'Scraping…');
+      scraped = await sendQueueScrape(workerTabId);
+    }
     if (!scraped) throw new Error('no_response');
+
+    // Same integrity check as tab hunts: the worker might have been redirected
+    // (login wall, bot check, region redirect) — never store the wrong product.
+    const expectedHost = safeHost(queueItem.url), scrapedHost = safeHost(scraped.url);
+    if (expectedHost && scrapedHost && expectedHost !== scrapedHost) { scraped = null; throw new Error('url_mismatch'); }
   } catch (error) {
     errorCode = error?.message || 'queue_worker_error';
   }
+
+  if (!scraped && errorCode !== 'cancelled') BulkState.consecutiveFailures++; else BulkState.consecutiveFailures = 0;
 
   const status = !scraped
     ? 'fail'
@@ -3705,12 +3968,23 @@ async function processQueueSequential(items) {
   try {
     worker = await ensureQueueWorkerTab();
     for (const item of items) {
-      while (BulkState.isPaused && !BulkState.isCancelled) await sleep(300);
+      await waitWhileBulkPaused();
       if (BulkState.isCancelled) break;
       worker = await ensureQueueWorkerTab();
-      await scrapeQueueItem(item, worker.id);
-      // Small cooldown prevents rapid navigation bursts on slow connections.
-      if (!BulkState.isCancelled) await sleep(500);
+      try {
+        await withHardLimit(scrapeQueueItem(item, worker.id), BulkState.ITEM_HARD_LIMIT || 90000, 'hard_timeout');
+      } catch (_) {
+        // The worker tab is wedged — record the failure and replace the tab.
+        setBulkRowStatus(item.id, 'fail', { error: 'hard_timeout' });
+        const qi = QueueState.items.find(i => i.id === item.id);
+        if (qi) { qi.status = 'needs_retry'; qi.error = 'hard_timeout'; qi.attempts = Number(qi.attempts || 0) + 1; }
+        BulkState.consecutiveFailures++;
+        await closeQueueWorkerTab();
+      }
+      // Cooldown grows when a site starts rejecting us; resets after a success.
+      const baseCooldown = BulkState.speedMode === 'turbo' ? 150 : 500;
+      const cooldown = BulkState.consecutiveFailures >= 3 ? Math.min(10000, 1500 * BulkState.consecutiveFailures) : baseCooldown;
+      if (!BulkState.isCancelled) await sleep(cooldown);
     }
   } finally {
     await closeQueueWorkerTab();
@@ -3748,10 +4022,11 @@ async function startQueueHunt() {
   if (BulkState.isHunting) return;
   const toHunt = QueueState.items.filter(i => i.checked && !i.hunted);
   if (toHunt.length === 0) { toast('No items selected in queue', 'warn'); return; }
-  BulkState.isHunting = true; BulkState.isPaused = false; BulkState.isCancelled = false;
+  BulkState.isHunting = true; BulkState.isPaused = false; BulkState.isCancelled = false; BulkState.consecutiveFailures = 0;
   { const cb = $('bulkCancelBtn'); if (cb) { cb.disabled = false; cb.textContent = 'Cancel'; } const pb = $('bulkPauseBtn'); if (pb) { pb.disabled = false; pb.textContent = 'Pause'; } }
   BulkState.results = []; BulkState.pendingFlush = []; BulkState._flushActive = false;
   BulkState.currentBatchId = `queue_${Date.now()}`; BulkState.huntStartTime = Date.now();
+  BulkState.selectedIds = new Set(toHunt.map(i => i.id));
   const fakeTabs = toHunt.map(i => ({ tabId: i.id, url: i.url, title: i.title || i.url,
     platform: typeof i.platform === 'string' ? { name: i.platform, tag: i.platform.substring(0,3).toUpperCase() } : (i.platform ? { name: i.platform, tag: String(i.platform).substring(0,3).toUpperCase() } : null) }));
   openBulkProgressModal(fakeTabs);
@@ -3902,11 +4177,12 @@ function updateBulkSummary() {
   if (eta) {
     if (n === 0) eta.textContent = '';
     else {
-      // ~2.5s per tab (aggressive pipeline) / PARALLEL + chunk pause
+      const speedMultiplier = BulkState.speedMode === 'turbo' ? 1.0 : 2.5;
       const chunks = Math.ceil(n / BulkState.CHUNK_SIZE);
-      const sec = Math.ceil((n * 2.5) / BulkState.PARALLEL) + (chunks - 1) * Math.ceil(BulkState.CHUNK_PAUSE / 1000);
+      const sec = Math.ceil((n * speedMultiplier) / BulkState.PARALLEL) + (chunks - 1) * Math.ceil(BulkState.CHUNK_PAUSE / 1000);
       const m = Math.floor(sec / 60), s = sec % 60;
-      eta.textContent = '~' + (m ? m + 'm ' : '') + s + 's estimated';
+      const speedTag = BulkState.speedMode === 'turbo' ? ' ⚡ Turbo' : ' 🛡️ Safe';
+      eta.textContent = '~' + (m ? m + 'm ' : '') + s + 's estimated' + speedTag;
     }
   }
   const btn = $('bulkHuntStartBtn');
@@ -3917,6 +4193,14 @@ function updateBulkSummary() {
 async function startBulkHunt(tabsOverride) {
   if (BulkState.isHunting) return;
   if (!tabsOverride && BulkState.selectedIds.size === 0) return;
+
+  if (BulkState.speedMode === 'turbo') {
+    BulkState.PARALLEL = 12;
+    BulkState.CHUNK_PAUSE = 100;
+  } else {
+    BulkState.PARALLEL = 5;
+    BulkState.CHUNK_PAUSE = 800;
+  }
 
   BulkState.isHunting   = true;
   BulkState.isPaused    = false;
@@ -4042,7 +4326,8 @@ async function resumePendingHunt() {
   let reopened = 0;
   for (const t of saved) {
     let live = null;
-    if (t.tabId != null) live = await new Promise(r => chrome.tabs.get(t.tabId, x => r(chrome.runtime.lastError ? null : x)));
+    // Queue hunts store string ids ("q_...") — chrome.tabs.get throws on those.
+    if (Number.isInteger(t.tabId)) live = await new Promise(r => { try { chrome.tabs.get(t.tabId, x => r(chrome.runtime.lastError ? null : x)); } catch (_) { r(null); } });
     if (live && live.url && sameUrl(live.url, t.url)) { tabs.push({ ...t, tabId: live.id }); continue; }
     try {
       const created = await chrome.tabs.create({ url: t.url, active: false });
@@ -4099,8 +4384,17 @@ async function processSmartQueue(tabs) {
 
         const p = (async () => {
           try {
-            await scrapeOneTab(tab);
-            tab._done = true;
+            await waitWhileBulkPaused();
+            // Adaptive backoff: if several tabs in a row fail the site is likely
+            // throttling us — slow down instead of burning the whole batch.
+            if (BulkState.consecutiveFailures >= 3 && !BulkState.isCancelled) {
+              const backoff = Math.min(8000, 1000 * (BulkState.consecutiveFailures - 2));
+              setBulkRowMeta(tab.tabId, `Backing off ${Math.round(backoff / 1000)}s…`);
+              await sleep(backoff);
+            }
+            await runScrapeGuarded(tab);
+            // _done is set in finally — marking it here dropped the tab from the
+            // resume snapshot while retries were still running.
             if (!BulkState.isCancelled) {
               for (let attempt = 2; attempt <= BulkState.MAX_RETRIES + 1; attempt++) {
                 if (BulkState.isCancelled) break;
@@ -4116,18 +4410,20 @@ async function processSmartQueue(tabs) {
                 const res = BulkState.results[lastResIndex];
                 if (res.status !== 'fail' && res.status !== 'partial') break;
 
+                // Do not retry errors that a retry cannot fix.
+                if (['tab_closed', 'url_mismatch', 'tab_navigated', 'product_mismatch', 'cancelled'].includes(res.error)) break;
+
                 BulkState.results.splice(lastResIndex, 1);
+                await waitWhileBulkPaused();
+                if (BulkState.isCancelled) break;
                 setBulkRowMeta(tab.tabId, `Retry ${attempt}/${BulkState.MAX_RETRIES + 1}…`);
 
                 try {
                   const td = await new Promise(r => chrome.tabs.get(tab.tabId, t => r(chrome.runtime.lastError ? null : t)));
-                  if (td && (td.discarded || td.status !== 'complete')) {
+                  if (!td) break; // tab gone — nothing to retry
+                  if (td.discarded || td.status !== 'complete') {
                     chrome.tabs.reload(tab.tabId, {}, () => { void chrome.runtime.lastError; });
-                    for (let w = 0; w < 24; w++) {
-                      await sleep(500);
-                      const td2 = await new Promise(r => chrome.tabs.get(tab.tabId, t => r(chrome.runtime.lastError ? null : t)));
-                      if (!td2 || td2.status === 'complete') break;
-                    }
+                    await waitForTabComplete(tab.tabId, 20000);
                     await sleep(300);
                   }
                 } catch (_) {}
@@ -4137,7 +4433,7 @@ async function processSmartQueue(tabs) {
                   await sleep(300);
                 } catch (_) {}
 
-                if (!BulkState.isCancelled) await scrapeOneTab(tab);
+                if (!BulkState.isCancelled) await runScrapeGuarded(tab);
               }
             }
 
@@ -4177,6 +4473,28 @@ async function processSmartQueue(tabs) {
   }
 }
 
+// Runs scrapeOneTab under an absolute time cap and tracks the failure streak
+// used for adaptive backoff. Guarantees a result row exists for the tab.
+async function runScrapeGuarded(tabInfo) {
+  try {
+    await withHardLimit(scrapeOneTab(tabInfo), BulkState.ITEM_HARD_LIMIT || 90000, 'hard_timeout');
+  } catch (e) {
+    const code = e?.message || 'hard_timeout';
+    const already = BulkState.results.some(r => r.tabId === tabInfo.tabId);
+    if (!already) {
+      BulkState.results.push({
+        tabId: tabInfo.tabId, url: tabInfo.url, title: tabInfo.title || '', price: '',
+        platform: tabInfo.platform?.name || 'Other', images: [], imagesBase64: [], videos: [], variants: [],
+        status: 'fail', error: code, scrapedAt: new Date().toISOString()
+      });
+    }
+    setBulkRowStatus(tabInfo.tabId, 'fail', { error: code });
+  }
+  const last = [...BulkState.results].reverse().find(r => r.tabId === tabInfo.tabId);
+  if (last && last.status === 'fail' && last.error !== 'cancelled') BulkState.consecutiveFailures++;
+  else BulkState.consecutiveFailures = 0;
+}
+
 async function scrapeOneTab(tabInfo) {
   setBulkRowStatus(tabInfo.tabId, 'active');
 
@@ -4195,13 +4513,16 @@ async function scrapeOneTab(tabInfo) {
         chrome.tabs.reload(tabInfo.tabId, {}, () => { void chrome.runtime.lastError; });
       }
       if (tabDetails.discarded || tabDetails.status !== 'complete') {
-        for (let i = 0; i < 10; i++) { // 10 × 200ms = 2s max wait
-          if (BulkState.isCancelled) { setBulkRowStatus(tabInfo.tabId, 'fail', { error: 'cancelled' }); return; }
-          tabDetails = await new Promise(resolve => chrome.tabs.get(tabInfo.tabId, t => resolve(chrome.runtime.lastError ? null : t)));
-          if (!tabDetails || tabDetails.status === 'complete') break;
-          await sleep(200);
-        }
+        // A discarded tab reloads from scratch — 2s was far too short and produced
+        // 'no_response' on perfectly good pages. Allow up to 20s.
+        tabDetails = await waitForTabComplete(tabInfo.tabId, tabDetails.discarded ? 20000 : 8000);
+        if (BulkState.isCancelled) { setBulkRowStatus(tabInfo.tabId, 'fail', { error: 'cancelled' }); return; }
+        if (tabDetails) await sleep(300);
       }
+    } else {
+      // Tab was closed by the user mid-hunt — record and move on immediately.
+      error = 'tab_closed';
+      throw new Error('tab_closed');
     }
 
     // PING first — only inject content script if not already alive
@@ -4235,12 +4556,9 @@ async function scrapeOneTab(tabInfo) {
       // Check cancel before starting
       if (BulkState.isCancelled) { error = 'cancelled'; scraped = null; throw new Error('cancelled'); }
 
-      try {
-        const temuResults = await Promise.race([
-          chrome.scripting.executeScript({
-            target: { tabId: tabInfo.tabId },
-            world: 'MAIN',   // access page-scope globals like window.__init_data__
-            func: () => {
+      // Hoisted so the post-refresh retry runs the SAME scraper. The old retry
+      // injected a stub that returned null, so every Temu/WGS retry failed.
+      const temuMainWorldScrape = () => {
               const h = location.hostname.toLowerCase();
               const isWgs = h.includes('worldwidegolfshops.com') || h.includes('worldwidegolfballs.com');
 
@@ -4454,7 +4772,14 @@ async function scrapeOneTab(tabInfo) {
 
               result.images = result.images.slice(0, 15);
               return result;
-            }
+      };
+
+      try {
+        const temuResults = await Promise.race([
+          chrome.scripting.executeScript({
+            target: { tabId: tabInfo.tabId },
+            world: 'MAIN',   // access page-scope globals like window.__init_data__
+            func: temuMainWorldScrape
           }),
           // If executeScript hangs for any reason, time out after 12s
           new Promise((_, reject) => {
@@ -4488,7 +4813,7 @@ async function scrapeOneTab(tabInfo) {
           setBulkRowMeta(tabInfo.tabId, 'Not responding — refreshing…');
           try { await new Promise(r => chrome.tabs.reload(tabInfo.tabId, {}, r)); } catch (_) {}
           let reloadDetails = null;
-          for (let i = 0; i < 30; i++) {               // 30 × 500ms = 15s max
+          for (let i = 0; i < 30; i++) {               // 30 �� 500ms = 15s max
             if (BulkState.isCancelled) break;
             reloadDetails = await new Promise(r => chrome.tabs.get(tabInfo.tabId, t => r(chrome.runtime.lastError ? null : t)));
             if (!reloadDetails || reloadDetails.status === 'complete') break;
@@ -4503,7 +4828,7 @@ async function scrapeOneTab(tabInfo) {
                 chrome.scripting.executeScript({
                   target: { tabId: tabInfo.tabId },
                   world: 'MAIN',
-                  func: () => { /* same inline func reused via closure — injected in retry */ return null; }
+                  func: temuMainWorldScrape
                 }),
                 new Promise((_, reject) => setTimeout(() => reject(new Error('temu_exec_timeout')), 12000))
               ]);
@@ -4567,16 +4892,11 @@ async function scrapeOneTab(tabInfo) {
       if (!scraped && !BulkState.isCancelled) {
         setBulkRowMeta(tabInfo.tabId, 'Not responding — refreshing…');
 
-        // Refresh the tab and wait for it to finish loading (up to 15 seconds)
-        try { await new Promise(r => chrome.tabs.reload(tabInfo.tabId, {}, r)); } catch (_) {}
-        let reloadDetails = null;
-        for (let i = 0; i < 15; i++) {               // 15 × 200ms = 3s max
-          if (BulkState.isCancelled) break;
-          reloadDetails = await new Promise(r => chrome.tabs.get(tabInfo.tabId, t => r(chrome.runtime.lastError ? null : t)));
-          if (!reloadDetails || reloadDetails.status === 'complete') break;
-          await sleep(200);
-        }
-        if (reloadDetails) await sleep(200);
+        // Refresh the tab and wait for it to finish loading (up to 20 seconds).
+        // Previously only 3s — a cold reload of Amazon/Walmart never made it.
+        try { await new Promise(r => chrome.tabs.reload(tabInfo.tabId, {}, () => { void chrome.runtime.lastError; r(); })); } catch (_) {}
+        const reloadDetails = await waitForTabComplete(tabInfo.tabId, 20000);
+        if (reloadDetails) await sleep(400);
 
         if (!BulkState.isCancelled) {
           setBulkRowMeta(tabInfo.tabId, 'Retrying after refresh…');
@@ -4602,12 +4922,12 @@ async function scrapeOneTab(tabInfo) {
             } catch (_) {}
           }
 
-          // Single retry attempt after refresh
+          // Single retry attempt after refresh — cold page, so allow the longer window
           scraped = await new Promise((resolve) => {
             let done = false;
             let finish = (v) => { if (!done) { done = true; resolve(v); } };
             let cancelCheck = setInterval(() => { if (BulkState.isCancelled) finish(null); }, 200);
-            const t = setTimeout(() => finish(null), BulkState.TAB_TIMEOUT);
+            const t = setTimeout(() => finish(null), BulkState.TAB_TIMEOUT_RETRY || 15000);
             const origFinish = finish;
             finish = (v) => { clearTimeout(t); clearInterval(cancelCheck); origFinish(v); };
             try {
@@ -4769,6 +5089,10 @@ async function imageDownloadPhase() {
       setBulkRowMeta(r.tabId, `${imgCount} imgs`);
       if (r.status === 'ok' && r.images?.length > 0 && imgCount === 0) {
         r.status = 'partial'; r.error = 'img_fetch_failed';
+        // The row was already flushed to the Library as "ok" — mirror the downgrade
+        // so the Library status and the result modal do not disagree.
+        BulkState.pendingStatusPatches = BulkState.pendingStatusPatches || [];
+        BulkState.pendingStatusPatches.push({ url: r.url, status: 'partial' });
         setBulkRowStatus(r.tabId, 'partial', { images: 0, error: 'img_fetch_failed' });
       } else {
         setBulkRowStatus(r.tabId, r.status, { images: imgCount, error: r.error });
@@ -4991,6 +5315,18 @@ function cancelBulkHunt() {
 async function finishBulkHunt() {
   msg({ action: 'STOP_KEEPALIVE' }).catch(() => {});
 
+  const patches = BulkState.pendingStatusPatches || [];
+  BulkState.pendingStatusPatches = [];
+  if (patches.length) {
+    try {
+      const rows = await getMasterRows();
+      const byUrl = new Map(patches.map(p => [String(p.url || '').toLowerCase(), p.status]));
+      let changed = false;
+      rows.forEach(row => { const s = byUrl.get(String(row.url || '').toLowerCase()); if (s && row.status !== s) { row.status = s; changed = true; } });
+      if (changed) await setMasterRows(rows);
+    } catch (_) {}
+  }
+
   const ok      = BulkState.results.filter(r => r.status === 'ok').length;
   const partial = BulkState.results.filter(r => r.status === 'partial').length;
   const fail    = BulkState.results.filter(r => r.status === 'fail').length;
@@ -5089,6 +5425,7 @@ async function appendToMasterSheet(rows) {
     title:        r.title,
     url:          r.url,
     platform:     r.platform,
+    folder:       r.folder || BulkState.targetFolder || 'General',
     price:        r.price,
     labelCost:    '',                                     // empty — user fills
     listPrice:    '',                                     // empty — user fills
@@ -5110,10 +5447,12 @@ async function appendToMasterSheet(rows) {
   if (batch) {
     batch.count += newRows.length;
     batch.platforms = [...new Set([...batch.platforms, ...newRows.map(r => r.platform)])];
+    if (!batch.folder && BulkState.targetFolder) batch.folder = BulkState.targetFolder;
   } else {
     batches.unshift({
       id:        BulkState.currentBatchId,
       date:      new Date().toISOString(),
+      folder:    BulkState.targetFolder || 'General',
       count:     newRows.length,
       platforms: [...new Set(newRows.map(r => r.platform))]
     });
@@ -6581,7 +6920,7 @@ document.getElementById('bulkZipBtn')
     exportImagesAsZip(products);
   });
 
-// ══════════════════════════════════════════════════════════════
+// ════════���═════════════════════════════════════════════════════
 // IMAGES TAB — Temu Image Downloader
 // Scans the active page for product images (>=100×100px),
 // lets the user select them in a 3-column grid, then downloads
@@ -6926,7 +7265,7 @@ function measureImage(src) {
   });
 }
 
-// ── Render grid ───────────────────────────────────────────────
+// ── Render grid ───��───────────────────────────────────────────
 function renderImgGrid() {
   const grid    = $('imgGrid');
   const countEl = $('imgFoundCount');
@@ -6970,6 +7309,17 @@ function renderImgGrid() {
         ImgState.selected.add(idx);
         card.classList.add('selected');
       }
+    });
+
+    // Hover Zoom Preview listeners
+    card.addEventListener('mouseenter', e => {
+      if (typeof window.showHoverPreview === 'function') window.showHoverPreview(img, e);
+    });
+    card.addEventListener('mousemove', e => {
+      if (typeof window.positionHoverPreview === 'function') window.positionHoverPreview(e);
+    });
+    card.addEventListener('mouseleave', () => {
+      if (typeof window.hideHoverPreview === 'function') window.hideHoverPreview();
     });
 
     grid.appendChild(card);
@@ -7159,6 +7509,39 @@ function initImagesTab() {
     document.querySelectorAll('.img-card').forEach(c => c.classList.remove('selected'));
   });
 
+  // ── Smart Filter: Select 1000px+ HD Images Only (v9.1) ──
+  $('imgSelectHdBtn')?.addEventListener('click', () => {
+    ImgState.selected.clear();
+    let count = 0;
+    ImgState.images.forEach((img, i) => {
+      const w = parseInt(img.w, 10) || 0;
+      const h = parseInt(img.h, 10) || 0;
+      let isHd = (w >= 1000 || h >= 1000);
+      if (!isHd && img.src) {
+        const match = img.src.match(/[_-](\d{3,5})x(\d{3,5})[_.]/);
+        if (match) {
+          const mw = parseInt(match[1], 10) || 0;
+          const mh = parseInt(match[2], 10) || 0;
+          if (mw >= 1000 || mh >= 1000) isHd = true;
+        }
+      }
+      if (isHd) {
+        ImgState.selected.add(i);
+        count++;
+      }
+    });
+    document.querySelectorAll('.img-card').forEach((c, idx) => {
+      c.classList.toggle('selected', ImgState.selected.has(idx));
+    });
+    toast(count ? `Selected ${count} HD images (1000px+)` : 'No 1000px+ images found', count ? 'ok' : 'info');
+  });
+
+  // ── Direct 1-Click Save to Library (v9.1) ──
+  $('huntDirectSaveBtn')?.addEventListener('click', directSaveProductToLibrary);
+
+  // Initialize Hover Preview
+  initImgHoverPreview();
+
   $('imgDownloadBtn')?.addEventListener('click', () => downloadSelectedImages());
 
   // ── Copy URLs button ──────────────────────────────────────────
@@ -7224,6 +7607,115 @@ function initImagesTab() {
       _autoRescan(tabId, tab.url);
     }
   });
+}
+
+// ── Image Hover Zoom Preview ─────────────────────────────────
+function initImgHoverPreview() {
+  const preview = $('imgHoverPreview');
+  const previewImg = $('imgHoverPreviewImg');
+  const previewBadge = $('imgHoverPreviewBadge');
+  if (!preview || !previewImg) return;
+
+  window.showHoverPreview = (img, e) => {
+    if (!img?.src) return;
+    previewImg.src = img.src;
+    if (previewBadge) {
+      const res = (img.w && img.h) ? `${img.w} × ${img.h}` : 'HD View';
+      previewBadge.textContent = res;
+    }
+    preview.classList.remove('hidden');
+    window.positionHoverPreview(e);
+  };
+
+  window.positionHoverPreview = (e) => {
+    if (!preview || preview.classList.contains('hidden')) return;
+    const pad = 14;
+    const w = 240;
+    const h = 240;
+    let left = e.clientX + pad;
+    let top = e.clientY - (h / 2);
+
+    if (left + w > window.innerWidth) {
+      left = Math.max(8, e.clientX - w - pad);
+    }
+    if (top < 8) top = 8;
+    if (top + h > window.innerHeight - 8) {
+      top = Math.max(8, window.innerHeight - h - 8);
+    }
+
+    preview.style.left = `${left}px`;
+    preview.style.top = `${top}px`;
+  };
+
+  window.hideHoverPreview = () => {
+    if (preview) {
+      preview.classList.add('hidden');
+      if (previewImg) previewImg.src = '';
+    }
+  };
+}
+
+// ── Direct 1-Click Save to Library ───────────────────────────
+async function directSaveProductToLibrary() {
+  const btn = $('huntDirectSaveBtn');
+  if (!btn) return;
+  btn.disabled = true;
+  const origHtml = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-right:6px"></span><span>Saving…</span>';
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id || !tab.url || !/^https?:/i.test(tab.url)) {
+      toast('Please open a product page on a website first', 'warn');
+      return;
+    }
+
+    // Request active page scrape
+    let scraped = await new Promise(resolve => {
+      let done = false;
+      const finish = val => { if (!done) { done = true; resolve(val); } };
+      const timer = setTimeout(() => finish(null), 5000);
+      chrome.tabs.sendMessage(tab.id, { action: 'SCRAPE_PAGE' }, res => {
+        clearTimeout(timer);
+        if (chrome.runtime.lastError || !res?.success || !res?.data) finish(null);
+        else finish(res.data);
+      });
+    });
+
+    const title = (scraped?.title || tab.title || 'Product').trim();
+    const url = tab.url;
+    const price = (scraped?.price || '').trim();
+    const pickedImages = (scraped?.images && scraped.images.length)
+      ? scraped.images.slice(0, 15)
+      : (ImgState.images.map(img => img.src).slice(0, 15));
+
+    const fastRes = await msg({
+      action: 'ADD_LINK_FAST',
+      url,
+      title,
+      folder: 'General',
+      notes: '',
+      price,
+      tags: [],
+      imageUrls: pickedImages,
+      videos: scraped?.videos || []
+    });
+
+    if (fastRes?.success) {
+      if (typeof refresh === 'function') await refresh();
+      toast('Product saved to Library! 🛍️', 'ok');
+      if (fastRes.link?.id) msg({ action: 'ENRICH_LINK', linkId: fastRes.link.id }).catch(() => {});
+    } else if (fastRes?.reason === 'duplicate') {
+      toast('Product already exists in Library', 'warn');
+    } else {
+      toast('Could not save product', 'err');
+    }
+  } catch (_) {
+    toast('Save to library failed', 'err');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origHtml;
+  }
 }
 
 // ============================================================
@@ -7729,7 +8221,7 @@ async function showQueueImportPreview(candidates, sourceLabel, opts = {}) {
   const selNoneBtn = $('qipSelectNoneBtn');
   if (!modal) return;
 
-  // ── Show loading state ─────────────────────────────────────
+  // ── Show loading state ─────��───────────────────────────────
   summary.innerHTML = '';
   groups.innerHTML  = `<div class="qip-loading"><span class="spinner"></span> Checking ${candidates.length} tab${candidates.length !== 1 ? 's' : ''} against queue…</div>`;
   confirmBtn.disabled = true;

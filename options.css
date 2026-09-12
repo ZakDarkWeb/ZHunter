@@ -43,6 +43,12 @@ kbd { display: inline-block; padding: 2px 8px; border-radius: 6px; border: 1px s
 .toggle-track:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .opt-version { font-weight: 600; }
 .toast-stack { left: auto; right: 24px; bottom: 24px; width: 320px; }
+.opt-section { animation: section-in 220ms var(--ease) both; }
+.opt-section:nth-of-type(2) { animation-delay: 30ms; }
+.opt-section:nth-of-type(3) { animation-delay: 60ms; }
+.opt-section:nth-of-type(4) { animation-delay: 90ms; }
+@keyframes section-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
 @media (max-width: 860px) {
   .opt-sidebar { position: static; width: 100%; height: auto; padding: 12px 0; border-right: 0; border-bottom: 1px solid var(--line); }
   .opt-sidebar-brand { border: 0; margin: 0; padding: 0 16px 8px; }

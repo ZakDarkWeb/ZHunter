@@ -71,7 +71,11 @@ function cleanPriceText(raw) {
   const patterns = [
     /[$£€¥₹₩]\s*\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?/,
     /\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?\s*[$£€¥₹₩]/,
-    /(?:USD|CAD|AUD|GBP|EUR|PKR|INR)\s*\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?/i,
+    /(?:USD|CAD|AUD|GBP|EUR|PKR|INR|AED|SAR|Rs\.?)\s*\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?/i,
+    // Bare numbers: prefer a value with cents so ratings ("4.5"), review counts
+    // and pack sizes are not mistaken for the price.
+    /\d{1,3}(?:[.,]\d{3})+[.,]\d{2}\b/,
+    /\d+[.,]\d{2}\b/,
     /\d+(?:[.,]\d{3})*(?:[.,]\d{1,2})?/
   ];
   for (const p of patterns) {
@@ -2587,6 +2591,59 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return true;
 });
 
+// ── Sourcing Platform Viewport Gradient Border ───────────────
+(function() {
+  if (window !== window.top) return;
+
+  const SOURCING_PLATFORM_KEYS = [
+    'walmart.com', 'amazon.', 'samsclub.com', 'faire.com', 'aliexpress.',
+    'alibaba.com', 'temu.', 'ebay.', 'etsy.com', 'shein.com', 'daraz.',
+    'worldwidegolfballs.com', 'worldwidegolfshops.com', 'flipkart.com',
+    'noon.com', 'lazada.', 'myshopify.com', 'target.com', 'costco.com',
+    'bestbuy.com', 'homedepot.com'
+  ];
+
+  const currentHost = host();
+  const isSourcingPlatform = SOURCING_PLATFORM_KEYS.some(k => {
+    if (k.endsWith('.')) return currentHost.startsWith(k) || currentHost.includes('.' + k);
+    return currentHost === k || currentHost.endsWith('.' + k);
+  });
+
+  if (!isSourcingPlatform) return;
+
+  function injectGradientBorder() {
+    if (document.getElementById('zhunter-viewport-border')) return;
+
+    const borderEl = document.createElement('div');
+    borderEl.id = 'zhunter-viewport-border';
+    borderEl.setAttribute('aria-hidden', 'true');
+    borderEl.style.cssText = [
+      'position: fixed !important',
+      'inset: 0px !important',
+      'pointer-events: none !important',
+      'z-index: 2147483646 !important',
+      'box-sizing: border-box !important',
+      'border: 3.5px solid transparent !important',
+      'background: linear-gradient(135deg, #ff3d00 0%, #ff9100 16%, #ffea00 33%, #00e676 50%, #00e5ff 67%, #2979ff 83%, #d500f9 100%) border-box !important',
+      '-webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0) !important',
+      '-webkit-mask-composite: xor !important',
+      'mask-composite: exclude !important',
+      'box-shadow: inset 0 0 10px rgba(0, 229, 255, 0.45), 0 0 14px rgba(255, 145, 0, 0.4) !important',
+      'filter: drop-shadow(0 0 6px rgba(0, 229, 255, 0.5)) !important'
+    ].join(';');
+
+    (document.body || document.documentElement).appendChild(borderEl);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectGradientBorder, { once: true });
+  } else {
+    injectGradientBorder();
+  }
+
+  window.addEventListener('popstate', injectGradientBorder);
+})();
+
 // ── In-Page ZHunter Floating Button ──────────────────────────
 (function() {
   const BG_PLATFORM_KEYS = [
@@ -3047,10 +3104,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         width: 400%; height: 400%;
         transform: translate(-50%,-50%) rotate(0deg);
         background: conic-gradient(from 0deg,
-          transparent 0%,
-          rgba(0,229,255,0.8) 20%,
-          rgba(168,85,247,0.6) 40%,
-          transparent 60%
+          #ff3d00 0%,
+          #ffea00 25%,
+          #00e5ff 50%,
+          #d500f9 75%,
+          #ff3d00 100%
         );
         animation: zh-panel-spin 4s linear infinite;
         z-index: 0;
@@ -3060,7 +3118,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       /* ── Panel glass body ────────────────────────────────── */
       .panel {
         width: 300px;
-        background: rgba(5, 10, 24, 0.92);
+        background: rgba(5, 10, 24, 0.94);
         backdrop-filter: blur(24px) saturate(160%);
         -webkit-backdrop-filter: blur(24px) saturate(160%);
         border-radius: 19px;
@@ -3075,22 +3133,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         display: flex; align-items: center; justify-content: space-between;
         padding: 12px 14px 11px;
         background: linear-gradient(135deg,
-          rgba(0,229,255,0.10) 0%,
-          rgba(168,85,247,0.06) 60%,
-          rgba(0,0,0,0) 100%);
-        border-bottom: 1px solid rgba(255,255,255,0.07);
-        cursor: pointer; user-select: none;
+          rgba(255,61,0,0.08) 0%,
+          rgba(0,229,255,0.08) 60%,
+          rgba(213,0,249,0.06) 100%);
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        cursor: grab; user-select: none;
         transition: background 0.2s;
         position: relative;
       }
-      /* Accent line at very top of header */
+      .header:active { cursor: grabbing; }
+      /* Vibrant rainbow gradient line at very top of header */
       .header::before {
         content: '';
-        position: absolute; top: 0; left: 14px; right: 14px; height: 1px;
-        background: linear-gradient(90deg, transparent, rgba(0,229,255,0.6), rgba(168,85,247,0.5), transparent);
+        position: absolute; top: 0; left: 14px; right: 14px; height: 2px;
+        background: linear-gradient(90deg, transparent, #ff3d00, #ffea00, #00e5ff, #d500f9, transparent);
         border-radius: 1px;
       }
-      .header:hover { background: linear-gradient(135deg, rgba(0,229,255,0.14) 0%, rgba(168,85,247,0.09) 100%); }
+      .header:hover { background: linear-gradient(135deg, rgba(255,61,0,0.12) 0%, rgba(0,229,255,0.12) 100%); }
       .header-left { display: flex; align-items: center; gap: 9px; }
       .header-icon {
         width: 30px; height: 30px;
@@ -3140,76 +3199,41 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         transition: background 0.15s, color 0.15s, transform 0.2s cubic-bezier(0.16,1,0.3,1);
         flex-shrink: 0;
       }
+      .toggle-btn:hover { background: rgba(0,229,255,0.15); color: #00e5ff; }
       .toggle-btn svg { pointer-events: none; }
-      .toggle-btn:hover {
-        background: rgba(0,229,255,0.12);
-        border-color: rgba(0,229,255,0.4);
-        color: #00e5ff;
-        transform: scale(1.12);
-      }
 
-      /* ── Body ────────────────────────────────────────────── */
+      /* ── Image grid body ─────────────────────────────────── */
       .body {
+        max-height: 260px;
+        overflow-y: auto;
         padding: 10px;
-        overflow-y: auto; overflow-x: hidden;
-        max-height: 340px;
       }
-      .body::-webkit-scrollbar { width: 3px; }
-      .body::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
-      .body::-webkit-scrollbar-thumb {
-        background: linear-gradient(to bottom, #00e5ff, #a855f7);
-        border-radius: 3px;
-      }
-
-      /* ── Empty / status states ───────────────────────────── */
+      .body::-webkit-scrollbar { width: 4px; }
+      .body::-webkit-scrollbar-thumb { background: rgba(0,229,255,0.25); border-radius: 4px; }
       .empty {
-        text-align: center;
-        padding: 32px 16px;
-        color: rgba(103,232,249,0.35);
-        font-size: 12px; line-height: 1.8;
+        padding: 30px 16px; text-align: center;
+        color: rgba(148,163,184,0.7); font-size: 11px; font-weight: 500;
+        line-height: 1.6;
       }
-      .empty-icon { font-size: 28px; margin-bottom: 8px; display: block; opacity: 0.5; }
-
-      /* ── Skeleton loader ─────────────────────────────────── */
-      .skeleton { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-      .skel-item {
-        aspect-ratio: 1; border-radius: 10px;
-        background: linear-gradient(90deg,
-          rgba(255,255,255,0.04) 25%,
-          rgba(0,229,255,0.07) 50%,
-          rgba(255,255,255,0.04) 75%);
-        background-size: 200% 100%;
-        animation: zh-shimmer 1.6s ease-in-out infinite;
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
       }
-      .skel-item:nth-child(2) { animation-delay: 0.15s; }
-      .skel-item:nth-child(3) { animation-delay: 0.30s; }
-      .skel-item:nth-child(4) { animation-delay: 0.45s; }
-      .skel-item:nth-child(5) { animation-delay: 0.60s; }
-      .skel-item:nth-child(6) { animation-delay: 0.75s; }
-
-      /* ── Image grid ──────────────────────────────────────── */
-      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
       .img-wrap {
-        position: relative; border-radius: 10px; overflow: hidden;
-        border: 1.5px solid rgba(255,255,255,0.06);
-        cursor: pointer; aspect-ratio: 1;
+        position: relative;
+        aspect-ratio: 1;
+        border-radius: 8px;
+        overflow: hidden;
         background: rgba(255,255,255,0.03);
-        transition: border-color 0.2s, transform 0.22s cubic-bezier(0.16,1,0.3,1), box-shadow 0.2s;
-        animation: zh-fade-up 0.4s cubic-bezier(0.16,1,0.3,1) both;
+        border: 1.5px solid rgba(255,255,255,0.08);
+        cursor: pointer;
+        transition: transform 0.18s cubic-bezier(0.16,1,0.3,1), border-color 0.18s, box-shadow 0.18s;
       }
-      .img-wrap:nth-child(1)  { animation-delay: 0.04s; }
-      .img-wrap:nth-child(2)  { animation-delay: 0.08s; }
-      .img-wrap:nth-child(3)  { animation-delay: 0.12s; }
-      .img-wrap:nth-child(4)  { animation-delay: 0.16s; }
-      .img-wrap:nth-child(5)  { animation-delay: 0.20s; }
-      .img-wrap:nth-child(6)  { animation-delay: 0.24s; }
-      .img-wrap:nth-child(7)  { animation-delay: 0.28s; }
-      .img-wrap:nth-child(8)  { animation-delay: 0.32s; }
-      .img-wrap:nth-child(9)  { animation-delay: 0.36s; }
       .img-wrap:hover {
-        border-color: rgba(0,229,255,0.45);
-        transform: scale(1.05) translateY(-2px);
-        box-shadow: 0 6px 18px rgba(0,0,0,0.5), 0 0 10px rgba(0,229,255,0.15);
+        transform: translateY(-2px);
+        border-color: rgba(0,229,255,0.4);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.4), 0 0 8px rgba(0,229,255,0.15);
         z-index: 2;
       }
       .img-wrap.selected {
@@ -3232,6 +3256,185 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         display: flex; align-items: center; justify-content: center;
         transition: background 0.18s, border-color 0.18s, box-shadow 0.18s;
         pointer-events: none;
+      }
+      .img-wrap.selected .img-check {
+        background: #00e5ff; border-color: #00e5ff;
+        box-shadow: 0 0 8px rgba(0,229,255,0.6);
+      }
+      .img-wrap.selected .img-check::after {
+        content: '';
+        width: 4px; height: 7px;
+        border: solid #000; border-width: 0 2px 2px 0;
+        transform: rotate(45deg); margin-bottom: 2px;
+        animation: zh-check-pop 0.22s cubic-bezier(0.16,1,0.3,1);
+      }
+      .img-idx {
+        position: absolute; bottom: 4px; right: 4px;
+        font-size: 8.5px; font-weight: 800; color: #e0f7fa;
+        background: rgba(5,10,24,0.85);
+        border: 1px solid rgba(0,229,255,0.35);
+        backdrop-filter: blur(6px);
+        padding: 1.5px 5px; border-radius: 4px;
+        font-family: var(--mono, monospace);
+        letter-spacing: -0.2px;
+      }
+
+      /* ── Footer 2-Tier Layout ────────────────────────────── */
+      .footer {
+        padding: 8px 10px 9px;
+        border-top: 1px solid rgba(255,255,255,0.08);
+        background: rgba(4,8,20,0.5);
+        display: flex; flex-direction: column; gap: 7px;
+      }
+      .footer-filters {
+        display: flex; gap: 5px; align-items: center;
+      }
+      .filter-pill {
+        padding: 3.5px 10px; border-radius: 6px;
+        font-size: 9.5px; font-weight: 700; letter-spacing: 0.2px;
+        cursor: pointer; border: 1px solid rgba(255,255,255,0.08);
+        background: rgba(255,255,255,0.04);
+        color: #94a3b8; font-family: inherit;
+        transition: all 0.16s ease;
+      }
+      .filter-pill:hover {
+        background: rgba(0,229,255,0.1);
+        border-color: rgba(0,229,255,0.35);
+        color: #00e5ff;
+        transform: translateY(-1px);
+      }
+      .filter-pill-hd {
+        color: #ffea00;
+        border-color: rgba(255,234,0,0.25);
+        background: rgba(255,234,0,0.05);
+      }
+      .filter-pill-hd:hover {
+        background: rgba(255,234,0,0.14);
+        border-color: rgba(255,234,0,0.55);
+        color: #fff176;
+      }
+      .filter-pill:active { transform: scale(0.94); }
+
+      /* Action buttons row */
+      .footer-actions {
+        display: flex; gap: 7px; width: 100%;
+      }
+      .action-btn {
+        flex: 1; height: 34px;
+        padding: 0 10px; border-radius: 9px;
+        font-size: 11px; font-weight: 800; letter-spacing: 0.2px;
+        cursor: pointer; border: 1px solid transparent;
+        font-family: inherit;
+        display: flex; align-items: center; justify-content: center; gap: 6px;
+        position: relative; overflow: hidden;
+        transition: transform 0.16s cubic-bezier(0.16,1,0.3,1), box-shadow 0.2s, background 0.2s;
+        user-select: none;
+      }
+      .action-btn:active:not(:disabled) { transform: scale(0.96); }
+      .action-btn:disabled {
+        opacity: 0.26; cursor: not-allowed;
+        background: rgba(255,255,255,0.06) !important;
+        border-color: rgba(255,255,255,0.05) !important;
+        color: rgba(255,255,255,0.35) !important;
+        box-shadow: none !important;
+      }
+      .btn-icon { font-size: 13px; line-height: 1; display: inline-flex; align-items: center; }
+      .btn-label { white-space: nowrap; font-weight: 800; }
+      .btn-badge {
+        font-size: 9px; font-weight: 900;
+        padding: 1px 6px; border-radius: 999px;
+        line-height: 1.2;
+      }
+
+      /* ZIP Button (Neon Ember / Fire) */
+      .btn-zip {
+        background: linear-gradient(135deg, #ff3d00 0%, #ff9100 100%);
+        color: #fff;
+        border-color: rgba(255,145,0,0.4);
+        box-shadow: 0 3px 12px rgba(255,61,0,0.35);
+      }
+      .btn-zip:not(:disabled):hover {
+        background: linear-gradient(135deg, #ff5722 0%, #ffa726 100%);
+        box-shadow: 0 5px 18px rgba(255,61,0,0.55), 0 0 10px rgba(255,145,0,0.4);
+        transform: translateY(-1px);
+      }
+      .btn-zip .btn-badge {
+        background: rgba(0,0,0,0.32);
+        color: #ffe0b2;
+      }
+
+      /* Files Button (Neon Cyan / Electric Blue) */
+      .btn-dl {
+        background: linear-gradient(135deg, #00e5ff 0%, #0091ea 100%);
+        color: #050a18;
+        border-color: rgba(0,229,255,0.4);
+        box-shadow: 0 3px 12px rgba(0,229,255,0.35);
+      }
+      .btn-dl:not(:disabled):hover {
+        background: linear-gradient(135deg, #18ffff 0%, #00b0ff 100%);
+        box-shadow: 0 5px 18px rgba(0,229,255,0.55), 0 0 10px rgba(0,229,255,0.4);
+        transform: translateY(-1px);
+      }
+      .btn-dl .btn-badge {
+        background: rgba(5,10,24,0.35);
+        color: #050a18;
+        font-weight: 900;
+      }
+      .action-btn.busy {
+        pointer-events: none;
+        opacity: 0.9 !important;
+        animation: zh-btn-busy 0.8s infinite alternate;
+      }
+      @keyframes zh-btn-busy {
+        from { filter: brightness(1); }
+        to   { filter: brightness(1.3); }
+      }
+
+      /* ── Status bar ──────────────────────────────────────── */
+      .status-bar {
+        padding: 4px 12px 8px;
+        font-size: 10px; color: rgba(148,163,184,0.5);
+        text-align: center; min-height: 20px;
+        transition: color 0.3s;
+      }
+      .status-bar.ok  { color: #34d399; text-shadow: 0 0 8px rgba(52,211,153,0.4); }
+      .status-bar.err { color: #f87171; }
+
+      /* ── Mini FAB ────────────────────────────────────────── */
+      .mini-widget-wrap {
+        position: relative;
+        width: 58px; height: 58px;
+        display: flex; align-items: center; justify-content: center;
+      }
+      .mini-ring {
+        position: absolute; inset: 0; border-radius: 50%;
+        background: conic-gradient(from 0deg, #ff3d00, #ffea00, #00e5ff, #d500f9, #ff3d00);
+        animation: zh-spin 3s linear infinite;
+        z-index: 0;
+      }
+      .mini-glow {
+        position: absolute; inset: 0; border-radius: 50%;
+        background: conic-gradient(from 0deg, #ff3d00, #ffea00, #00e5ff, #d500f9, #ff3d00);
+        animation: zh-spin 3s linear infinite;
+        filter: blur(8px); opacity: 0.55;
+        transition: opacity 0.25s, filter 0.25s;
+        z-index: 0;
+      }
+      .mini-widget-wrap:hover .mini-glow { filter: blur(14px); opacity: 0.85; }
+      .mini-widget {
+        width: 52px; height: 52px;
+        border-radius: 50%;
+        position: relative; z-index: 1;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; user-select: none; touch-action: none;
+        background: radial-gradient(circle at 38% 32%, rgba(0,229,255,0.12) 0%, rgba(5,10,24,0.98) 70%);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
+        transition: transform 0.22s cubic-bezier(0.16,1,0.3,1), box-shadow 0.22s;
+        border: none; outline: none;
+      }
+      .mini-widget:hover { transform: scale(1.07); }
+      .mini-widget:active { transform: scale(0.93); }
+      .mini-widget img {  .mini-widget:active { transform: scale(0.93); }r-events: none;
       }
       .img-wrap.selected .img-check {
         background: #00e5ff; border-color: #00e5ff;
@@ -3307,7 +3510,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .status-bar.ok  { color: #34d399; text-shadow: 0 0 8px rgba(52,211,153,0.4); }
       .status-bar.err { color: #f87171; }
 
-      /* ── Mini FAB ────────────────────────────────────────── */
+      /* ── Mini FAB ────────────────────────────��───────────── */
       .mini-widget-wrap {
         position: relative;
         width: 58px; height: 58px;
@@ -3475,9 +3678,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const footer = document.createElement('div');
     footer.className = 'footer';
     footer.innerHTML = `
-      <button class="btn-sm btn-ghost" id="zh-sel-all">All</button>
-      <button class="btn-sm btn-ghost" id="zh-sel-none">None</button>
-      <button class="btn-sm btn-dl" id="zh-dl-btn" disabled>\u2193 Download</button>
+      <div class="footer-filters">
+        <button class="filter-pill" id="zh-sel-all">All</button>
+        <button class="filter-pill" id="zh-sel-none">None</button>
+        <button class="filter-pill filter-pill-hd" id="zh-sel-hd" title="Select 1000px+ images only">⚡ HD Only</button>
+      </div>
+      <div class="footer-actions">
+        <button class="action-btn btn-zip" id="zh-zip-btn" disabled>
+          <span class="btn-icon">📦</span>
+          <span class="btn-label" id="zh-zip-label">ZIP Archive</span>
+          <span class="btn-badge" id="zh-zip-count" style="display:none">0</span>
+        </button>
+        <button class="action-btn btn-dl" id="zh-dl-btn" disabled>
+          <span class="btn-icon">↓</span>
+          <span class="btn-label" id="zh-dl-label">Save Files</span>
+          <span class="btn-badge" id="zh-dl-count" style="display:none">0</span>
+        </button>
+      </div>
     `;
     panel.appendChild(footer);
 
@@ -3490,7 +3707,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     // ── State
     let images = [];
     let selected = new Set();
-    // v8: the card always starts minimized; the user expands it by clicking the mini button.
+    const imageDims = new Map(); // cache detected dimensions
     let collapsed = true;
     let widgetPosition = { top: null, bottom: 20, left: null, right: 20 };
     let dragging = false;
@@ -3502,6 +3719,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const toggleBtn = shadow.getElementById('zh-toggle-btn');
     const countEl   = shadow.getElementById('zh-img-count');
     const miniCount = miniCountEl; // from wrapper
+    const zipBtn    = shadow.getElementById('zh-zip-btn');
     const dlBtn     = shadow.getElementById('zh-dl-btn');
     const status    = shadow.getElementById('zh-status');
 
@@ -3530,86 +3748,26 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     };
     const applyWidgetPosition = () => {
       const widgetHeight = collapsed ? 60 : 384;
-      const widgetWidth = collapsed ? 60 : 299;
+      const widgetWidth = collapsed ? 60 : 300;
 
-      if (Number.isFinite(widgetPosition.top)) {
+      if (Number.isFinite(widgetPosition.top) && Number.isFinite(widgetPosition.left)) {
         const maxTop = Math.max(8, window.innerHeight - widgetHeight - 8);
-        widgetPosition.top = Math.max(8, Math.min(widgetPosition.top, maxTop));
-        root.style.top = `${widgetPosition.top}px`;
-        root.style.bottom = 'auto';
-      } else if (Number.isFinite(widgetPosition.bottom)) {
-        const maxBottom = Math.max(8, window.innerHeight - widgetHeight - 8);
-        widgetPosition.bottom = Math.max(8, Math.min(widgetPosition.bottom, maxBottom));
-        root.style.bottom = `${widgetPosition.bottom}px`;
-        root.style.top = 'auto';
-      } else {
-        widgetPosition.bottom = 20;
-        root.style.bottom = '20px';
-        root.style.top = 'auto';
-      }
-
-      if (Number.isFinite(widgetPosition.left)) {
         const maxLeft = Math.max(8, window.innerWidth - widgetWidth - 8);
-        widgetPosition.left = Math.max(8, Math.min(widgetPosition.left, maxLeft));
-        root.style.left = `${widgetPosition.left}px`;
+        const clampedTop = Math.max(8, Math.min(widgetPosition.top, maxTop));
+        const clampedLeft = Math.max(8, Math.min(widgetPosition.left, maxLeft));
+        root.style.top = `${clampedTop}px`;
+        root.style.left = `${clampedLeft}px`;
+        root.style.bottom = 'auto';
         root.style.right = 'auto';
       } else {
+        root.style.top = 'auto';
         root.style.left = 'auto';
-        root.style.right = `${Number.isFinite(widgetPosition.right) ? widgetPosition.right : 20}px`;
+        root.style.bottom = '20px';
+        root.style.right = '20px';
       }
     };
     const SVG_CHEVRON_LEFT  = `<svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 2L3 5L7 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     const SVG_CHEVRON_RIGHT = `<svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 2L7 5L3 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-    
-    // -- Render grid
-    function renderGrid() {
-      const b = shadow.getElementById('zh-img-body');
-      const subEl = shadow.getElementById('zh-header-sub');
-
-      if (!images.length) {
-        b.innerHTML = `
-          <div class="empty">
-            <span class="empty-icon">&#128444;</span>
-            No product images found<br>
-            <span style="font-size:9px;opacity:0.45">Navigate to a product page to scan</span>
-          </div>`;
-        countEl.textContent = '0';
-        if (subEl) subEl.textContent = 'No images found';
-        pulseMiniCount(0);
-        return;
-      }
-
-      countEl.textContent = images.length;
-      if (subEl) subEl.textContent = selected.size + ' of ' + images.length + ' selected';
-      pulseMiniCount(images.length);
-
-      const grid = document.createElement('div');
-      grid.className = 'grid';
-      images.forEach((url, i) => {
-        // Try to extract resolution from URL for badge label
-        const resMatch = url.match(/[_-](\d{3,5})x(\d{3,5})[_.]/);
-        const badge = resMatch ? (resMatch[1] + 'x' + resMatch[2]) : ('#' + (i + 1));
-
-        const wrap = document.createElement('div');
-        wrap.className = 'img-wrap' + (selected.has(i) ? ' selected' : '');
-        wrap.innerHTML =
-          '<img src="' + url + '" loading="lazy" alt="img ' + (i+1) + '" title="' + url + '"' +
-          ' onerror="this.style.opacity=\'0.15\'">' +
-          '<div class="img-check"></div>' +
-          '<div class="img-idx">' + badge + '</div>';
-        wrap.addEventListener('click', () => {
-          if (selected.has(i)) selected.delete(i);
-          else selected.add(i);
-          wrap.classList.toggle('selected', selected.has(i));
-          if (subEl) subEl.textContent = selected.size + ' of ' + images.length + ' selected';
-          updateDlBtn();
-        });
-        grid.appendChild(wrap);
-      });
-      b.innerHTML = '';
-      b.appendChild(grid);
-      updateDlBtn();
-    }
 
     const applyCollapsedState = () => {
       panelWrap.classList.toggle('collapsed', collapsed);
@@ -3636,58 +3794,56 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       dragMoved = false;
       dragOrigin = { x: event.clientX, y: event.clientY };
       dragOffset = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-      target.setPointerCapture?.(event.pointerId);
-      document.body.style.userSelect = 'none'; // prevent host page text selection
+      try { target?.setPointerCapture?.(event.pointerId); } catch (_) {}
+      document.body.style.userSelect = 'none';
       event.preventDefault();
     };
-    const moveDrag = event => {
+
+    const handlePointerMove = event => {
       if (!dragging) return;
-      const nextLeft = event.clientX - dragOffset.x;
-      const nextTop = event.clientY - dragOffset.y;
-      if (Math.abs(event.clientX - dragOrigin.x) > 3 || Math.abs(event.clientY - dragOrigin.y) > 3) dragMoved = true;
-      widgetPosition.left = Math.max(8, Math.min(nextLeft, window.innerWidth - (collapsed ? 60 : 295) - 8));
-      widgetPosition.top = Math.max(8, Math.min(nextTop, window.innerHeight - (collapsed ? 60 : 380)));
-      widgetPosition.bottom = null;
-      widgetPosition.right = null;
-      applyWidgetPosition();
+      const dist = Math.hypot(event.clientX - dragOrigin.x, event.clientY - dragOrigin.y);
+      if (dist > 8) {
+        dragMoved = true;
+        const widgetHeight = collapsed ? 60 : 384;
+        const widgetWidth = collapsed ? 60 : 300;
+        widgetPosition.left = Math.max(8, Math.min(event.clientX - dragOffset.x, window.innerWidth - widgetWidth - 8));
+        widgetPosition.top = Math.max(8, Math.min(event.clientY - dragOffset.y, window.innerHeight - widgetHeight - 8));
+        widgetPosition.bottom = null;
+        widgetPosition.right = null;
+        applyWidgetPosition();
+      }
     };
-    const endDrag = () => {
-      if (!dragging) return;
-      dragging = false;
-      document.body.style.userSelect = ''; // restore host page text selection
-      saveWidgetState();
-    };
-    header.addEventListener('pointerdown', event => {
-      if (event.target !== toggleBtn) beginDrag(event, header);
-    });
-    // Mini widget: simple click to open, drag only on the panel header
-    miniWrap.addEventListener('pointermove', event => {
-      if (!dragging) return;
-      const nextLeft = event.clientX - dragOffset.x;
-      const nextTop  = event.clientY - dragOffset.y;
-      if (Math.abs(event.clientX - dragOrigin.x) > 3 || Math.abs(event.clientY - dragOrigin.y) > 3) dragMoved = true;
-      widgetPosition.left   = Math.max(8, Math.min(nextLeft, window.innerWidth  - 60 - 8));
-      widgetPosition.top    = Math.max(8, Math.min(nextTop,  window.innerHeight - 60 - 8));
-      widgetPosition.bottom = null;
-      widgetPosition.right  = null;
-      applyWidgetPosition();
-    });
-    miniWrap.addEventListener('pointerdown', event => {
-      if (event.button !== 0) return;
-      const rect = root.getBoundingClientRect();
-      dragging = true;
-      dragMoved = false;
-      dragOrigin = { x: event.clientX, y: event.clientY };
-      dragOffset = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-      miniWrap.setPointerCapture?.(event.pointerId);
-    });
-    miniWrap.addEventListener('pointerup', event => {
-      const wasDragged = dragMoved;
+
+    const endDrag = (event, target) => {
+      if (!dragging) return false;
+      const wasMoved = dragMoved;
       dragging = false;
       dragMoved = false;
       document.body.style.userSelect = '';
+      try { target?.releasePointerCapture?.(event.pointerId); } catch (_) {}
       saveWidgetState();
-      if (!wasDragged) {
+      return wasMoved;
+    };
+
+    // Header dragging (open panel)
+    header.addEventListener('pointerdown', event => {
+      if (event.target === toggleBtn || toggleBtn.contains(event.target)) return;
+      beginDrag(event, header);
+    });
+    header.addEventListener('pointermove', handlePointerMove);
+    header.addEventListener('pointerup', event => {
+      endDrag(event, header);
+    });
+
+    // Mini widget dragging (collapsed button)
+    miniWrap.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      beginDrag(event, miniWrap);
+    });
+    miniWrap.addEventListener('pointermove', handlePointerMove);
+    miniWrap.addEventListener('pointerup', event => {
+      const moved = endDrag(event, miniWrap);
+      if (!moved) {
         // Pure click — open the card
         setCollapsed(false);
       }
@@ -3695,14 +3851,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     miniWrap.addEventListener('click', event => {
       event.stopPropagation();
     });
-    // Minimize button (chevron) in card header
+
+    // Minimize button in card header
     toggleBtn.addEventListener('click', event => {
       event.stopPropagation();
-      setCollapsed(true);
-    });
-    // Header click also collapses (except on the toggle button itself)
-    header.addEventListener('click', event => {
-      if (event.target === toggleBtn || toggleBtn.contains(event.target)) return;
       setCollapsed(true);
     });
 
@@ -3714,25 +3866,53 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     // ── Render grid
     function renderGrid() {
       const b = shadow.getElementById('zh-img-body');
+      const subEl = shadow.getElementById('zh-header-sub');
       if (!images.length) {
         b.innerHTML = `<div class="empty">🔍 No product images found<br><span style="font-size:9px;opacity:0.6">Navigate to a product page to scan</span></div>`;
         countEl.textContent = '0';
+        if (subEl) subEl.textContent = 'No images found';
         pulseMiniCount(0);
         return;
       }
       countEl.textContent = images.length;
+      if (subEl) subEl.textContent = `${selected.size} of ${images.length} selected`;
       pulseMiniCount(images.length);
       const grid = document.createElement('div');
       grid.className = 'grid';
+
       images.forEach((url, i) => {
+        // Try to extract resolution from URL token first
+        const resMatch = url.match(/[_-](\d{3,5})x(\d{3,5})[_.]/);
+        let initialBadge = '#' + (i + 1);
+        if (resMatch) {
+          initialBadge = resMatch[1] + '×' + resMatch[2];
+          imageDims.set(i, { w: parseInt(resMatch[1], 10), h: parseInt(resMatch[2], 10) });
+        } else if (imageDims.has(i)) {
+          const d = imageDims.get(i);
+          initialBadge = (d.w >= 1000 || d.h >= 1000) ? `${d.w}×${d.h}` : `${d.w}×${d.h}`;
+        }
+
         const wrap = document.createElement('div');
         wrap.className = 'img-wrap' + (selected.has(i) ? ' selected' : '');
         wrap.innerHTML = `
           <img src="${url}" loading="lazy" alt="img ${i+1}" title="${url}"
-               onerror="this.style.opacity='0.2';this.src='data:image/svg+xml,<svg xmlns=\\'http://www.w3.org/2000/svg\\' viewBox=\\'0 0 100 100\\'><text y=\\'.9em\\' font-size=\\'90\\'>\u{1F5BC}</text></svg>'">
+               onerror="this.style.opacity='0.2';">
           <div class="img-check"></div>
-          <div class="img-idx">${i + 1}</div>
+          <div class="img-idx" id="zh-badge-${i}">${initialBadge}</div>
         `;
+
+        // Measure natural size upon load to guarantee real resolution badge
+        const imgEl = wrap.querySelector('img');
+        imgEl.addEventListener('load', () => {
+          if (imgEl.naturalWidth && imgEl.naturalHeight) {
+            imageDims.set(i, { w: imgEl.naturalWidth, h: imgEl.naturalHeight });
+            const badgeEl = wrap.querySelector(`#zh-badge-${i}`);
+            if (badgeEl) {
+              badgeEl.textContent = `${imgEl.naturalWidth}×${imgEl.naturalHeight}`;
+            }
+          }
+        }, { once: true });
+
         wrap.addEventListener('click', () => {
           if (selected.has(i)) selected.delete(i);
           else selected.add(i);
@@ -3748,29 +3928,142 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     function updateDlBtn() {
       const n = selected.size;
-      dlBtn.disabled = n === 0;
-      dlBtn.textContent = n > 0 ? `\u2193 Download ${n}` : '\u2193 Download';
+      const subEl = shadow.getElementById('zh-header-sub');
+      if (subEl) subEl.textContent = `${n} of ${images.length} selected`;
+
+      const zipCount = shadow.getElementById('zh-zip-count');
+      const dlCount  = shadow.getElementById('zh-dl-count');
+      const zipLabel = shadow.getElementById('zh-zip-label');
+      const dlLabel  = shadow.getElementById('zh-dl-label');
+
+      if (dlBtn) {
+        dlBtn.disabled = n === 0;
+        dlBtn.classList.remove('busy');
+        if (dlLabel) dlLabel.textContent = 'Save Files';
+        if (dlCount) {
+          dlCount.textContent = n;
+          dlCount.style.display = n > 0 ? 'inline-block' : 'none';
+        }
+      }
+      if (zipBtn) {
+        zipBtn.disabled = n === 0;
+        zipBtn.classList.remove('busy');
+        if (zipLabel) zipLabel.textContent = 'ZIP Archive';
+        if (zipCount) {
+          zipCount.textContent = n;
+          zipCount.style.display = n > 0 ? 'inline-block' : 'none';
+        }
+      }
     }
 
-    // ── Select All / None
-    shadow.getElementById('zh-sel-all').addEventListener('click', () => {
+    // ── Select All / None / HD
+    shadow.getElementById('zh-sel-all')?.addEventListener('click', () => {
       images.forEach((_, i) => selected.add(i));
       renderGrid();
     });
-    shadow.getElementById('zh-sel-none').addEventListener('click', () => {
+    shadow.getElementById('zh-sel-none')?.addEventListener('click', () => {
       selected.clear();
       renderGrid();
     });
+    shadow.getElementById('zh-sel-hd')?.addEventListener('click', () => {
+      selected.clear();
+      images.forEach((url, i) => {
+        const dim = imageDims.get(i);
+        const resMatch = url.match(/[_-](\d{3,5})x(\d{3,5})[_.]/);
+        let isHd = false;
+        if (dim && (dim.w >= 1000 || dim.h >= 1000)) isHd = true;
+        if (resMatch && (parseInt(resMatch[1], 10) >= 1000 || parseInt(resMatch[2], 10) >= 1000)) isHd = true;
+        if (isHd) selected.add(i);
+      });
+      renderGrid();
+    });
 
-    // ── Download Selected
+    // ── 📦 Download as ZIP Archive (v9.1)
+    zipBtn?.addEventListener('click', async () => {
+      if (!selected.size) return;
+      zipBtn.disabled = true;
+      zipBtn.classList.add('busy');
+      if (dlBtn) dlBtn.disabled = true;
+      const zipLabel = shadow.getElementById('zh-zip-label');
+      const toDownload = [...selected].sort();
+      const productSlug = document.title.replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 30) || 'product';
+
+      status.className = 'status-bar';
+      status.textContent = `Packing ZIP: 0 / ${toDownload.length}...`;
+      if (zipLabel) zipLabel.textContent = `Packing 0/${toDownload.length}`;
+
+      try {
+        if (typeof JSZip === 'undefined') {
+          throw new Error('JSZip library loading');
+        }
+        const zip = new JSZip();
+        let packed = 0;
+
+        for (const idx of toDownload) {
+          const url = images[idx];
+          const ext = url.match(/\.(jpe?g|png|webp|gif)/i)?.[1] || 'jpg';
+          const filename = `${productSlug}-img${idx + 1}.${ext}`;
+
+          try {
+            const base64Res = await new Promise(resolve => {
+              chrome.runtime.sendMessage({ action: 'FETCH_BASE64', url }, res => resolve(res));
+            });
+
+            if (base64Res?.base64) {
+              const rawData = base64Res.base64.replace(/^data:[^;]+;base64,/, '');
+              zip.file(filename, rawData, { base64: true });
+              packed++;
+            }
+          } catch (_) {}
+
+          status.textContent = `Packing ZIP: ${packed} / ${toDownload.length}...`;
+          if (zipLabel) zipLabel.textContent = `Packing ${packed}/${toDownload.length}`;
+        }
+
+        if (packed === 0) throw new Error('No images could be packed');
+
+        status.textContent = 'Generating ZIP archive...';
+        if (zipLabel) zipLabel.textContent = '⚡ Building ZIP...';
+        const zipContent = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 3 } });
+        const objUrl = URL.createObjectURL(zipContent);
+        const a = document.createElement('a');
+        a.href = objUrl;
+        a.download = `${productSlug}-images.zip`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(objUrl), 2500);
+
+        status.className = 'status-bar ok';
+        status.textContent = `\u2713 ZIP downloaded: ${packed} images!`;
+        if (zipLabel) zipLabel.textContent = '✓ Downloaded!';
+      } catch (err) {
+        status.className = 'status-bar err';
+        status.textContent = 'ZIP failed — downloading as files…';
+        if (zipLabel) zipLabel.textContent = 'ZIP Failed';
+        dlBtn?.click();
+      } finally {
+        setTimeout(() => {
+          updateDlBtn();
+          status.textContent = '';
+          status.className = 'status-bar';
+        }, 3000);
+      }
+    });
+
+    // ── Download as Individual Files
     dlBtn.addEventListener('click', async () => {
       if (!selected.size) return;
       dlBtn.disabled = true;
+      dlBtn.classList.add('busy');
+      if (zipBtn) zipBtn.disabled = true;
+      const dlLabel = shadow.getElementById('zh-dl-label');
       const toDownload = [...selected].sort();
       let done = 0;
 
       status.className = 'status-bar';
       status.textContent = `Downloading 0 / ${toDownload.length}...`;
+      if (dlLabel) dlLabel.textContent = `0/${toDownload.length}`;
 
       const productSlug = document.title.replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 30);
 
@@ -3782,14 +4075,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           downloadViaBackground(url, filename);
           done++;
           status.textContent = `Downloading ${done} / ${toDownload.length}...`;
-          await new Promise(r => setTimeout(r, 400)); // stagger downloads
+          if (dlLabel) dlLabel.textContent = `${done}/${toDownload.length}`;
+          await new Promise(r => setTimeout(r, 350));
         } catch (_) {}
       }
 
       status.className = 'status-bar ok';
       status.textContent = `\u2713 ${done} image${done !== 1 ? 's' : ''} downloaded!`;
-      dlBtn.disabled = false;
-      setTimeout(() => { status.textContent = ''; status.className = 'status-bar'; }, 4000);
+      if (dlLabel) dlLabel.textContent = '✓ Done!';
+      setTimeout(() => {
+        updateDlBtn();
+        status.textContent = '';
+        status.className = 'status-bar';
+      }, 3000);
     });
 
     // ── Load images (with delay for SPAs)

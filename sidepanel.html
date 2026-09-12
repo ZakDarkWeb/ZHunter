@@ -12,7 +12,7 @@
     <div class="brand-logo-wrap"><div class="brand-logo-glow"></div><img src="icon48.png" alt="" class="brand-logo-img" data-onerror="hide" /></div>
     <div class="brand-text">
       <div class="brand-name-row"><span class="brand-name">ZHunter</span><span class="brand-pro">PRO</span></div>
-      <div class="brand-meta"><span class="brand-version" data-version>v8.1.1</span><span class="brand-sub">Ultimate Product Hunter</span></div>
+      <div class="brand-meta"><span class="brand-version" data-version>v9.0.0</span><span class="brand-sub">Ultimate Product Hunter</span></div>
     </div>
     <div class="sp"></div>
     <span class="stat-pill" title="Products in Library"><svg class="i" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></svg><span id="totalCount">0</span></span>
@@ -34,11 +34,18 @@
   <!-- ═══ HUNT (images + videos of the current page) ═══ -->
   <section id="tab-images" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-images">
     <div class="body">
+      <!-- ── Direct 1-Click Save to Library (v9.1) ── -->
+      <button id="huntDirectSaveBtn" class="hunt-save-product-btn" type="button" title="Save current product title, price & images directly into Library">
+        <svg class="i" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h3l2 2h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M12 11v6m-3-3h6"/></svg>
+        <span>Save Product to Library</span>
+      </button>
+
       <div class="h">
         <span class="lbl">Images <span class="lbl-n" id="imgFoundCount">0</span></span>
         <div class="h-actions">
           <button id="imgSelectAllBtn" class="btn btn-ghost btn-xs" type="button">All</button>
           <button id="imgDeselectAllBtn" class="btn btn-ghost btn-xs" type="button">None</button>
+          <button id="imgSelectHdBtn" class="btn btn-ghost btn-xs" type="button" title="Select images 1000px and larger">HD (1000+)</button>
           <button id="imgRefreshBtn" class="btn btn-ghost btn-xs" type="button" title="Re-scan page"><svg class="i" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.5-6.4L21 8M3 4v4h4M21 12a9 9 0 0 1-15.5 6.4L3 16M21 20v-4h-4"/></svg></button>
         </div>
       </div>
@@ -143,6 +150,16 @@
         </div>
         <div id="bulkTabsList" class="tbl"><div class="skel"><i></i><i></i><i></i></div><div class="skel"><i></i><i></i><i></i></div><div class="skel"><i></i><i></i><i></i></div></div>
         <div class="summary" id="bulkSummary"><span id="bulkSelectedCount">0 selected</span><span id="bulkTimeEstimate"></span></div>
+        <div class="bulk-controls-row">
+          <div class="bulk-folder-group" title="Assign hunted products to Library folder">
+            <span class="bulk-folder-lbl">📁 Target:</span>
+            <select id="bulkFolderSelect" class="inp sel bulk-folder-sel" aria-label="Target Library Folder"></select>
+          </div>
+          <div class="speed-pill-group" id="bulkSpeedGroup" title="Choose hunt speed mode">
+            <button type="button" class="speed-pill active" data-speed="safe">🛡️ Safe</button>
+            <button type="button" class="speed-pill" data-speed="turbo">⚡ Turbo</button>
+          </div>
+        </div>
         <div class="card-actions">
           <button id="bulkHuntStartBtn" class="btn btn-primary btn-lg rainbow" type="button" disabled><span class="bulk-main-text">Hunt all open tabs</span></button>
           <button id="bulkAddAllTabsToQueueBtn" class="hidden" type="button" aria-hidden="true" tabindex="-1"></button>
@@ -158,11 +175,30 @@
       <div id="bulkQueueView" class="bulk-view active card">
         <div class="card-head">
           <span class="lbl">Links to hunt</span>
+          <div class="speed-pill-group" id="queueSpeedGroup" title="Choose queue speed mode">
+            <button type="button" class="speed-pill active" data-speed="safe">🛡️ Safe</button>
+            <button type="button" class="speed-pill" data-speed="turbo">⚡ Turbo</button>
+          </div>
           <label class="check-row check-row-sm" title="Add product pages to this list automatically as you browse"><input type="checkbox" id="queueAutoCaptureToggle"><span>Auto-capture</span></label>
         </div>
         <div class="row-inline">
-          <input id="queueAddInput" class="inp" type="url" placeholder="Paste a product link and press Add" autocomplete="off">
+          <input id="queueAddInput" class="inp" type="text" placeholder="Paste product link(s) or multiple URLs" autocomplete="off">
           <button id="queueAddBtn" class="btn btn-ghost" type="button">Add</button>
+          <button id="queuePasteClipboardBtn" class="btn btn-ghost" type="button" title="Import links directly from clipboard">📋 Paste</button>
+          <button id="queueToggleListBtn" class="btn btn-ghost" type="button" title="Open multi-line list paste box">📝 Paste List</button>
+          <button id="queueImportFileBtn" class="btn btn-ghost" type="button" title="Import list from .txt or .csv file">📁 File</button>
+          <input type="file" id="queueFileInput" accept=".txt,.csv" class="hidden">
+        </div>
+        <!-- ── Multi-Line List Box (collapsible) ── -->
+        <div id="queueListContainer" class="queue-list-box hidden">
+          <textarea id="queueListTextarea" class="inp queue-list-textarea" rows="4" placeholder="Paste list of product links here (one URL per line)...&#10;https://www.amazon.com/dp/...&#10;https://www.walmart.com/ip/..."></textarea>
+          <div class="queue-list-foot">
+            <span id="queueListCounter" class="queue-list-counter">0 links detected</span>
+            <div class="queue-list-acts">
+              <button id="queueListClearBtn" class="btn btn-ghost btn-xs" type="button">Clear</button>
+              <button id="queueListAddBtn" class="btn btn-primary btn-xs" type="button" disabled>Add to Queue</button>
+            </div>
+          </div>
         </div>
         <div class="row-inline">
           <input id="queueSearchInput" class="inp" type="search" placeholder="Search queue" autocomplete="off">
@@ -173,6 +209,16 @@
             <option value="needs_retry">Needs attention</option>
             <option value="error">Errors</option>
           </select>
+        </div>
+        <!-- ── Store Filter Chips ── -->
+        <div class="queue-store-filter-bar" id="queueStoreFilterBar">
+          <button class="store-chip active" data-store="all" type="button">All Stores</button>
+          <button class="store-chip" data-store="amazon" type="button">Amazon</button>
+          <button class="store-chip" data-store="walmart" type="button">Walmart</button>
+          <button class="store-chip" data-store="aliexpress" type="button">AliExpress</button>
+          <button class="store-chip" data-store="temu" type="button">Temu</button>
+          <button class="store-chip" data-store="ebay" type="button">eBay</button>
+          <button class="store-chip" data-store="other" type="button">Other</button>
         </div>
         <div class="h-actions h-actions-wrap">
           <button id="queueSelectAllBtn" class="btn btn-ghost btn-xs" type="button">All</button>
@@ -270,6 +316,12 @@
         <div class="it"><div class="l"><b>Theme</b></div><div class="seg" id="themeSeg"><button type="button" data-theme="dark">Dark</button><button type="button" data-theme="light">Light</button></div></div>
         <div class="it"><div class="l"><b>Visual effects</b><span>Card motion and transitions</span></div><div class="seg" id="fxSeg"><button type="button" data-fx="off">Off</button><button type="button" data-fx="subtle" class="on">Subtle</button><button type="button" data-fx="full">Full</button></div></div>
       </div>
+      <span class="lbl">Tabs &amp; Navigation</span>
+      <div class="set" id="spTabsSettings">
+        <div class="it"><div class="l"><b>Hunt tab</b><span>Single-page image &amp; video hunter</span></div><label class="sw-wrap"><input type="checkbox" id="tabToggleHunt" checked><span class="sw"></span></label></div>
+        <div class="it"><div class="l"><b>Bulk tab</b><span>Multi-tab batch hunting &amp; queue</span></div><label class="sw-wrap"><input type="checkbox" id="tabToggleBulk" checked><span class="sw"></span></label></div>
+        <div class="it"><div class="l"><b>Library tab</b><span>Saved products, history &amp; export</span></div><label class="sw-wrap"><input type="checkbox" id="tabToggleLibrary" checked><span class="sw"></span></label></div>
+      </div>
       <span class="lbl">Bulk hunt</span>
       <div class="set" id="spQuickSettings">
         <div class="it"><div class="l"><b>Close tabs after a successful hunt</b><span>Failed tabs always stay open</span></div><label class="sw-wrap"><input type="checkbox" data-setting="bulkAutoCloseTabs"><span class="sw"></span></label></div>
@@ -278,15 +330,32 @@
       </div>
       <span class="lbl">Images</span>
       <div class="set">
-        <div class="it"><div class="l"><b>Format</b></div><select class="sel" style="width:120px" data-setting="imageFormat"><option value="original">Original</option><option value="jpg">JPG</option><option value="png">PNG</option></select></div>
-        <div class="it"><div class="l"><b>Ratio</b><span>Square for Temu and most marketplaces</span></div><select class="sel" style="width:120px" data-setting="imageRatio"><option value="original">Original</option><option value="1:1">1:1 square</option><option value="3:4">3:4</option><option value="4:3">4:3</option></select></div>
-        <div class="it"><div class="l"><b>Keep files under 5 MB</b></div><label class="sw-wrap"><input type="checkbox" data-setting="imageMax5MB"><span class="sw"></span></label></div>
+        <div class="it"><div class="l"><b>Format</b><span>PNG is lossless, JPG is smaller</span></div><select class="sel" style="width:120px" data-setting="imageFormat"><option value="original">Original</option><option value="jpg">JPG</option><option value="png">PNG</option></select></div>
+        <div class="it"><div class="l"><b>Ratio</b><span>Square for Temu and most marketplaces</span></div><select class="sel" style="width:120px" data-setting="imageRatio"><option value="original">Original</option><option value="1:1">1:1 square</option><option value="3:4">3:4 portrait</option><option value="4:3">4:3 landscape</option></select></div>
+        <div class="it"><div class="l"><b>Padding colour</b><span>When image is padded to fit ratio</span></div><select class="sel" style="width:120px" data-setting="imageBg"><option value="white">White</option><option value="original">Transparent</option></select></div>
+        <div class="it"><div class="l"><b>Minimum size</b><span>Skip smaller images (0 = keep all)</span></div><div style="display:flex;align-items:center;gap:6px"><input type="number" class="inp" style="width:75px;text-align:center;font-family:var(--mono)" data-setting="imageMinSize" min="0" max="4000" placeholder="0"><span class="hint">px</span></div></div>
+        <div class="it"><div class="l"><b>Keep files under 5 MB</b><span>Recompress oversized images</span></div><label class="sw-wrap"><input type="checkbox" data-setting="imageMax5MB"><span class="sw"></span></label></div>
       </div>
-      <span class="lbl">More</span>
+
+      <span class="lbl">Data &amp; Backup</span>
       <div class="set">
-        <div class="it"><div class="l"><b>All settings, data backup, shortcuts</b><span>Opens the full settings page</span></div><button class="btn btn-ghost btn-xs" type="button" id="settingsOpenFullBtn">Open</button></div>
+        <div class="it"><div class="l"><b>Storage used</b><span><span id="spStorageDesc">Calculating…</span></span></div><button id="spRefreshStatsBtn" class="btn btn-ghost btn-xs" type="button">Refresh</button></div>
+        <div class="it"><div class="l"><b>Backup everything</b><span>Library, history, queue and settings JSON</span></div><button id="spExportDataBtn" class="btn btn-primary btn-xs" type="button">Download JSON</button></div>
       </div>
-      <p class="hint">ZHunter <span data-version>v8.1.1</span> · Everything stays on this computer.</p>
+
+      <span class="lbl">About</span>
+      <div class="set">
+        <div class="it"><div class="l"><b>Version</b><span>Manifest V3 · Local storage</span></div><span class="stat-pill" data-version>v9.0.0</span></div>
+        <div class="it"><div class="l"><b>Supported stores</b><span>Amazon, Walmart, Sam's Club, Alibaba, AliExpress, Temu, eBay, Etsy, Shein, Target, Costco, Best Buy, Home Depot, Flipkart, Noon, Lazada</span></div></div>
+      </div>
+
+      <span class="lbl" style="color:var(--bad, #ef4444)">Danger zone</span>
+      <div class="set danger">
+        <div class="it"><div class="l"><b>Clear Library</b><span>Deletes all hunted products and hunt history</span></div><button id="spDangerClearProducts" class="btn btn-ghost btn-xs btn-danger" type="button">Clear Library</button></div>
+        <div class="it"><div class="l"><b>Reset settings</b><span>Restores all settings back to default</span></div><button id="spDangerResetSettings" class="btn btn-ghost btn-xs btn-danger" type="button">Reset settings</button></div>
+        <div class="it"><div class="l"><b>Wipe everything</b><span>Permanently deletes products, settings, and queue</span></div><button id="spDangerWipeAll" class="btn btn-ghost btn-xs btn-danger" type="button">Wipe everything</button></div>
+      </div>
+      <p class="hint" style="margin-top:14px;text-align:center">ZHunter <span data-version>v9.0.0</span> · Everything stays on this computer.</p>
     </div>
   </section>
 
@@ -570,6 +639,14 @@
   </div>
 
   <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- ── Image Hover Preview (Quick Zoom) ── -->
+  <div id="imgHoverPreview" class="img-hover-preview hidden">
+    <div class="img-hover-frame">
+      <img id="imgHoverPreviewImg" src="" alt="HD Preview">
+      <div id="imgHoverPreviewBadge" class="img-hover-badge">HD</div>
+    </div>
+  </div>
 
   <script src="lib/xlsx-js-style.min.js"></script>
   <script src="lib/jszip.min.js"></script>

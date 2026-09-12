@@ -90,7 +90,11 @@ const _rateLimitMap = new Map();
 const RATE_LIMIT_MAX       = 30;    // max requests per window per sender
 const RATE_LIMIT_WINDOW_MS = 10000; // 10-second rolling window
 function isRateLimited(sender) {
-  const key  = sender.tab?.id ?? 'extension';
+  // Only page content scripts are rate limited. The side panel / options page
+  // legitimately send bursts of messages during bulk hunts (FETCH_BASE64_BATCH,
+  // UPDATE_BULK_QUEUE, GET_DATA...) and must never be throttled.
+  if (!sender?.tab) return false;
+  const key  = sender.tab.id;
   const now  = Date.now();
   let   entry = _rateLimitMap.get(key);
   if (!entry || now > entry.resetAt) entry = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
@@ -408,8 +412,17 @@ function sanitizeBulkQueueItem(item) {
     hunted: item.hunted === true,
     status,
     attempts: Number.isFinite(item.attempts) ? Math.max(0, Math.min(20, Math.floor(item.attempts))) : 0,
-    error: sanitizeText(item.error || '').slice(0, 500)
+    error: sanitizeText(item.error || '').slice(0, 500),
+    source: sanitizeText(item.source || 'manual').slice(0, 40)
   };
+}
+
+// Serialises every read-modify-write on the bulk queue. Without this the side
+// panel's full-replace (UPDATE_BULK_QUEUE), auto-capture and context-menu adds
+// can interleave and silently drop items.
+async function readBulkQueue() {
+  const res = await chrome.storage.local.get(BULK_QUEUE_KEY);
+  return Array.isArray(res[BULK_QUEUE_KEY]) ? res[BULK_QUEUE_KEY] : [];
 }
 
 function sanitizeText(str) {
@@ -817,12 +830,13 @@ async function updateLink(id, updates) {
 
 // Add URLs to the live bulk queue (shared by the side panel, the context menu
 // and the content script). Duplicates and unsupported links are skipped.
-async function addBulkQueueItems(items) {
+function addBulkQueueItems(items) {
+  return withWriteLock(() => addBulkQueueItemsUnlocked(items));
+}
+
+async function addBulkQueueItemsUnlocked(items) {
   if (!Array.isArray(items)) return { success: false, reason: 'invalid_items', addedCount: 0, rejected: [] };
-  const existing = await chrome.storage.local.get(BULK_QUEUE_KEY);
-  const queue = Array.isArray(existing[BULK_QUEUE_KEY])
-    ? existing[BULK_QUEUE_KEY].map(sanitizeBulkQueueItem).filter(Boolean)
-    : [];
+  const queue = (await readBulkQueue()).map(sanitizeBulkQueueItem).filter(Boolean);
   const seen = new Set(queue.map(item => normalizeQueueUrl(item.url)));
   const added = [], rejected = [];
   let duplicates = 0;
@@ -1188,10 +1202,13 @@ async function handleMessage(msg, sender) {
       const imageUrls = Array.isArray(link.imageUrls) ? [...link.imageUrls] : [];
       // FIX: Validate the index — an unvalidated splice(negativeIndex, 1) silently
       // deletes from the end of the array, removing the wrong image.
+      // Base64 images live in IndexedDB, so images[] is usually empty — validate
+      // against the longer of the two arrays or removal always fails.
       const rmIdx = parseInt(msg.imageIndex);
-      if (isNaN(rmIdx) || rmIdx < 0 || rmIdx >= images.length) return { success: false, reason: 'invalid_index' };
-      images.splice(rmIdx, 1);
-      imageUrls.splice(rmIdx, 1);
+      const maxLen = Math.max(images.length, imageUrls.length);
+      if (isNaN(rmIdx) || rmIdx < 0 || rmIdx >= maxLen) return { success: false, reason: 'invalid_index' };
+      if (rmIdx < images.length) images.splice(rmIdx, 1);
+      if (rmIdx < imageUrls.length) imageUrls.splice(rmIdx, 1);
       data.links[idx] = { ...link, images, imageUrls, dateModified: new Date().toISOString() };
       await saveData(data);
       return { success: true, images };
@@ -1216,13 +1233,12 @@ async function handleMessage(msg, sender) {
       const queue = Array.isArray(res[BULK_QUEUE_KEY]) ? res[BULK_QUEUE_KEY] : [];
       return { success: true, queued: !!normUrl && queue.some(item => normalizeQueueUrl(item?.url) === normUrl) };
     }
-    case 'ADD_TO_BULK_QUEUE': {
+    case 'ADD_TO_BULK_QUEUE': return await withWriteLock(async () => {
       const normUrl = normalizeQueueUrl(msg.url || sender?.tab?.url || '');
       if (!normUrl) return { success: false, reason: 'invalid_url' };
       if (!isSupportedProductUrl(normUrl)) return { success: false, reason: 'unsupported_url' };
       if (sender?.tab?.url && normalizeQueueUrl(sender.tab.url) !== normUrl) return { success: false, reason: 'tab_url_mismatch' };
-      const res2 = await chrome.storage.local.get(BULK_QUEUE_KEY);
-      const q = Array.isArray(res2[BULK_QUEUE_KEY]) ? res2[BULK_QUEUE_KEY] : [];
+      const q = await readBulkQueue();
       if (q.some(i => normalizeQueueUrl(i?.url) === normUrl)) return { success: false, reason: 'duplicate' };
       const newItem = {
         id: `q_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
@@ -1231,15 +1247,17 @@ async function handleMessage(msg, sender) {
         platform: bgDetectPlatform(normUrl),
         addedAt: Date.now(),
         checked: true,
+        hunted: false,
         status: 'queued',
         attempts: 0,
-        error: ''
+        error: '',
+        source: 'page_button'
       };
       q.push(newItem);
-      await chrome.storage.local.set({ [BULK_QUEUE_KEY]: q.slice(0, 2000) });
+      await chrome.storage.local.set({ [BULK_QUEUE_KEY]: q.slice(-2000) });
       broadcastMessage({ action: 'BULK_QUEUE_UPDATED', item: newItem });
       return { success: true, item: newItem };
-    }
+    });
     case 'PREVIEW_BULK_QUEUE': {
       // Read-only classification for the import preview (mirrors ADD_BULK_QUEUE_ITEMS, no write).
       const existing = await chrome.storage.local.get(BULK_QUEUE_KEY);
@@ -1260,13 +1278,12 @@ async function handleMessage(msg, sender) {
     }
     case 'ADD_BULK_QUEUE_ITEMS':
       return await addBulkQueueItems(msg.items);
-    case 'REMOVE_FROM_BULK_QUEUE': {
-      const res3 = await chrome.storage.local.get(BULK_QUEUE_KEY);
-      const q3 = (res3[BULK_QUEUE_KEY] || []).filter(i => i.id !== msg.id);
+    case 'REMOVE_FROM_BULK_QUEUE': return await withWriteLock(async () => {
+      const q3 = (await readBulkQueue()).filter(i => i?.id !== msg.id);
       await chrome.storage.local.set({ [BULK_QUEUE_KEY]: q3 });
       return { success: true };
-    }
-    case 'UPDATE_BULK_QUEUE': {
+    });
+    case 'UPDATE_BULK_QUEUE': return await withWriteLock(async () => {
       // Full replace — popup sends updated array (check/uncheck, reorder).
       if (!Array.isArray(msg.queue)) return { success: false, reason: 'invalid_queue' };
       const cleanQueue = [];
@@ -1279,11 +1296,11 @@ async function handleMessage(msg, sender) {
       }
       await chrome.storage.local.set({ [BULK_QUEUE_KEY]: cleanQueue });
       return { success: true, count: cleanQueue.length };
-    }
-    case 'CLEAR_BULK_QUEUE': {
+    });
+    case 'CLEAR_BULK_QUEUE': return await withWriteLock(async () => {
       await chrome.storage.local.set({ [BULK_QUEUE_KEY]: [] });
       return { success: true };
-    }
+    });
 
     default: return { success: false, reason: 'unknown_action' };
   }
@@ -1413,16 +1430,15 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (!url.startsWith('http')) return;
   if (!bgDetectPlatform(url)) return;
 
-  // Check auto-capture enabled setting (default: true)
-  const stored = await chrome.storage.local.get(['zakLinkCollectorData', BULK_QUEUE_KEY]);
-  const settings = stored['zakLinkCollectorData']?.settings || {};
+  const stored = await chrome.storage.local.get(STORAGE_KEY);
+  const settings = stored[STORAGE_KEY]?.settings || {};
   if (settings.bulkQueueAutoCapture !== true) return; // v8: off unless the user turns it on
 
-  const queue = stored[BULK_QUEUE_KEY] || [];
-  // FIX BUG 1: Use normalizeQueueUrl() so tracking params (utm_, gclid, etc.) are stripped
-  // before duplicate check — prevents adding the same product URL twice with different params.
   const normUrl = normalizeQueueUrl(url);
   if (!normUrl || !isSupportedProductUrl(normUrl)) return;
+
+  await withWriteLock(async () => {
+  const queue = await readBulkQueue();
   if (queue.some(i => normalizeQueueUrl(i?.url || '') === normUrl)) return; // already queued
 
   // FIX BUG 2: Include all required queue item fields so the UI renders the item correctly.
@@ -1441,10 +1457,9 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     source:   'auto_capture'  // FIX BUG 8: source field populated so UI column is not blank
   };
   queue.push(newItem);
-  // Keep queue from growing unbounded
-  const trimmed = queue.slice(-500);
-  await chrome.storage.local.set({ [BULK_QUEUE_KEY]: trimmed });
-
-  // Notify open popup / sidepanel to refresh their queue list
-  chrome.runtime.sendMessage({ action: 'BULK_QUEUE_UPDATED', item: newItem }).catch(() => {});
+  // Same cap as every other queue writer — the old 500 cap silently dropped
+  // older manual/pasted items whenever auto-capture fired.
+  await chrome.storage.local.set({ [BULK_QUEUE_KEY]: queue.slice(-2000) });
+  broadcastMessage({ action: 'BULK_QUEUE_UPDATED', item: newItem });
+  });
 });

@@ -123,8 +123,12 @@
       toast('Saved', 'ok');
     } catch (_) { toast('Could not save setting', 'err'); }
   }));
-  document.querySelector('#tab-btn-settings')?.addEventListener('click', loadQuickSettings);
+  document.querySelector('#tab-btn-settings')?.addEventListener('click', () => {
+    loadQuickSettings();
+    loadSpStats();
+  });
   loadQuickSettings();
+  loadSpStats();
 
   // ── Settings tab ────────────────────────────────────────────
   function syncThemeSeg() {
@@ -139,7 +143,6 @@
   });
   new MutationObserver(syncThemeSeg).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   syncThemeSeg();
-  $('settingsOpenFullBtn')?.addEventListener('click', () => chrome.runtime.openOptionsPage());
 
   const FX_KEY = 'zhunter_fx';
   function applyFx(mode) {
@@ -151,6 +154,130 @@
     const b = e.target.closest('button'); if (!b) return;
     applyFx(b.dataset.fx);
     chrome.storage.local.set({ [FX_KEY]: b.dataset.fx }).catch(() => {});
+  });
+
+  // ── Storage stats & Backup ──────────────────────────────────
+  async function loadSpStats() {
+    try {
+      const bytes = await chrome.storage.local.getBytesInUse?.();
+      const descEl = $('spStorageDesc');
+      if (descEl) {
+        if (typeof bytes === 'number') {
+          const mb = (bytes / (1024 * 1024)).toFixed(2);
+          const kb = (bytes / 1024).toFixed(1);
+          descEl.textContent = bytes > 1024 * 1024 ? `${mb} MB used` : `${kb} KB used`;
+        } else {
+          descEl.textContent = 'Active (Local)';
+        }
+      }
+    } catch (_) {}
+  }
+  $('spRefreshStatsBtn')?.addEventListener('click', loadSpStats);
+
+  // JSON Export Backup
+  $('spExportDataBtn')?.addEventListener('click', async () => {
+    try {
+      const st = await chrome.storage.local.get(['zhunterMasterSheet', 'zhunterMasterBatches', 'zhunterBulkQueue', 'zakLinkCollectorData']);
+      const backup = {
+        app: 'ZHunter',
+        version: '9.0.0',
+        exported: new Date().toISOString(),
+        settings: st.zakLinkCollectorData?.settings || {},
+        masterSheet: Array.isArray(st.zhunterMasterSheet) ? st.zhunterMasterSheet : [],
+        batches: Array.isArray(st.zhunterMasterBatches) ? st.zhunterMasterBatches : [],
+        queue: Array.isArray(st.zhunterBulkQueue) ? st.zhunterBulkQueue : []
+      };
+      if (!backup.masterSheet.length && !backup.queue.length && !Object.keys(backup.settings).length) {
+        toast('Nothing to back up yet', 'warn');
+        return;
+      }
+      const jsonBlob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      await zhSaveBlob(jsonBlob, `zhunter-backup-${new Date().toISOString().slice(0, 10)}.json`);
+      toast(`Backup saved: ${backup.masterSheet.length} products`, 'ok');
+    } catch (_) {
+      toast('Backup failed', 'err');
+    }
+  });
+
+  // ── Danger Zone ─────────────────────────────────────────────
+  $('spDangerClearProducts')?.addEventListener('click', () => {
+    if (typeof showConfirm !== 'function') return;
+    showConfirm(
+      'Clear All Products',
+      'This empties the Library (all hunted products and hunt history). Settings and queue are kept. This cannot be undone.',
+      'Delete All Products',
+      async () => {
+        try {
+          const res = await msg({ action: 'CLEAR_ALL' });
+          if (!res?.success) throw new Error();
+          if (typeof refresh === 'function') await refresh();
+          loadSpStats();
+          toast('All products deleted', 'ok');
+        } catch (_) {
+          toast('Failed to clear products', 'err');
+        }
+      }
+    );
+  });
+
+  $('spDangerResetSettings')?.addEventListener('click', () => {
+    if (typeof showConfirm !== 'function') return;
+    showConfirm(
+      'Reset All Settings',
+      'This will restore all settings to default values. Your saved products will NOT be deleted.',
+      'Reset Settings',
+      async () => {
+        try {
+          const defaultSettings = {
+            autoCategory: true,
+            duplicateCheck: true,
+            badgeEnabled: true,
+            saveToCurrentFolder: true,
+            lastFolder: '',
+            bulkFilenamePrefix: 'zhunter_',
+            autoSkipDuplicates: true,
+            bulkAutoCloseTabs: true,
+            imageFormat: 'original',
+            imageRatio: 'original',
+            imageBg: 'white',
+            imageMinSize: 0,
+            imageMax5MB: true,
+            bulkQueueAutoCapture: false
+          };
+          await msg({ action: 'UPDATE_SETTINGS', settings: defaultSettings });
+          await loadQuickSettings();
+          toast('Settings reset to defaults', 'ok');
+        } catch (_) {
+          toast('Failed to reset settings', 'err');
+        }
+      }
+    );
+  });
+
+  $('spDangerWipeAll')?.addEventListener('click', () => {
+    if (typeof showConfirm !== 'function') return;
+    showConfirm(
+      '⚠️ Wipe ALL Data',
+      'This will permanently delete ALL products, folders, tags, settings, AND bulk hunt master sheet. This absolutely cannot be undone.',
+      'Wipe Everything',
+      async () => {
+        try {
+          await chrome.storage.local.remove([
+            'zakLinkCollectorData',
+            'zhunterMasterSheet',
+            'zhunterMasterBatches',
+            'zhunterBulkQueue',
+            'zhunterHuntState',
+            'zhunterPendingImageHunt',
+            'zhunter_fx',
+            'zakUIState'
+          ]);
+          location.reload();
+        } catch (_) {
+          toast('Failed to wipe data', 'err');
+        }
+      }
+    );
   });
 
 
@@ -167,6 +294,71 @@
   nav?.addEventListener('click', () => setTimeout(moveIndicator, 0));
   window.addEventListener('resize', moveIndicator);
   setTimeout(moveIndicator, 50);
+
+  // ── Customizable Tab Visibility (v9.1) ───────────────────────
+  const TAB_VISIBILITY_KEY = 'zhunter_tabs_visibility';
+  const defaultTabVis = { hunt: true, bulk: true, library: true };
+
+  const tabToggleHunt    = $('tabToggleHunt');
+  const tabToggleBulk    = $('tabToggleBulk');
+  const tabToggleLibrary = $('tabToggleLibrary');
+
+  const btnHunt    = $('tab-btn-images');
+  const btnBulk    = $('tab-btn-bulk');
+  const btnLibrary = $('tab-btn-library');
+
+  function applyTabVisibility(vis) {
+    if (!vis) return;
+    const isHunt    = vis.hunt !== false;
+    const isBulk    = vis.bulk !== false;
+    const isLibrary = vis.library !== false;
+
+    if (btnHunt)    btnHunt.classList.toggle('hidden', !isHunt);
+    if (btnBulk)    btnBulk.classList.toggle('hidden', !isBulk);
+    if (btnLibrary) btnLibrary.classList.toggle('hidden', !isLibrary);
+
+    if (tabToggleHunt)    tabToggleHunt.checked = isHunt;
+    if (tabToggleBulk)    tabToggleBulk.checked = isBulk;
+    if (tabToggleLibrary) tabToggleLibrary.checked = isLibrary;
+
+    // If active tab was disabled, switch to first visible tab or settings
+    const activeBtn = nav?.querySelector('.tab-btn.active');
+    if (activeBtn && activeBtn.classList.contains('hidden')) {
+      const fallbackBtn = nav?.querySelector('.tab-btn:not(.hidden)');
+      if (fallbackBtn) fallbackBtn.click();
+    }
+    setTimeout(moveIndicator, 40);
+  }
+
+  async function saveTabVisibility() {
+    let hunt    = tabToggleHunt ? tabToggleHunt.checked : true;
+    let bulk    = tabToggleBulk ? tabToggleBulk.checked : true;
+    let library = tabToggleLibrary ? tabToggleLibrary.checked : true;
+
+    // Safeguard: Ensure at least one hunting tab remains enabled
+    if (!hunt && !bulk && !library) {
+      hunt = true;
+      if (tabToggleHunt) tabToggleHunt.checked = true;
+      if (typeof toast === 'function') toast('At least one tab must remain enabled', 'warn');
+    }
+
+    const vis = { hunt, bulk, library };
+    try {
+      await chrome.storage.local.set({ [TAB_VISIBILITY_KEY]: vis });
+    } catch (_) {}
+    applyTabVisibility(vis);
+  }
+
+  try {
+    chrome.storage.local.get([TAB_VISIBILITY_KEY], res => {
+      const saved = res?.[TAB_VISIBILITY_KEY] || defaultTabVis;
+      applyTabVisibility(saved);
+    });
+  } catch (_) {}
+
+  tabToggleHunt?.addEventListener('change', saveTabVisibility);
+  tabToggleBulk?.addEventListener('change', saveTabVisibility);
+  tabToggleLibrary?.addEventListener('change', saveTabVisibility);
 
   // ── Count-up on the hunt-complete stats ─────────────────────
   function countUp(el) {
