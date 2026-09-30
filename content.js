@@ -125,11 +125,8 @@ function normalizeImg(rawUrl) {
      'fmt', 'wid', 'hei', 'fit'].forEach(p => u.searchParams.delete(p));
 
     if (/(media-amazon\.com|ssl-images-amazon\.com|images-na\.|amazon\.[a-z.]+)/i.test(h)) {
-      // FIX: Replace ALL size tokens with SL1500 (highest standard CDN quality).
-      // Previously this stripped the token entirely, which can result in Amazon
-      // serving a low-res default. SL1500 guarantees 1500px longest side.
-      // Global flag handles chained tokens like ._AC_US40_._SX300_.
-      let path = u.pathname.replace(/\._[A-Z0-9_,]{2,}_\./gi, '._AC_SL1500_.');
+      // Stripping size/crop tokens gives the true uncompressed master upload (2000px-4000px).
+      let path = u.pathname.replace(/\._[A-Za-z0-9_,]+_\./g, '.');
       u.pathname = path;
       return u.href;
     }
@@ -1062,7 +1059,7 @@ function universalPrice() {
 // not from the full document.
 
 function scrapeAmazon() {
-  const r = { title: '', price: '', images: [], videos: [], variants: [] };
+  const r = { title: '', price: '', images: [], videos: [], variants: [], _strictImages: true };
 
   const titleEl = document.querySelector('#productTitle, #title span, h1.a-size-large, #title_feature_div #title');
   if (titleEl) r.title = titleEl.innerText.trim();
@@ -1088,43 +1085,28 @@ function scrapeAmazon() {
     if (w) r.price = `$${w}.${f}`;
   }
 
-  // ── TWO-TIER URL QUALITY STRATEGY ────────────────────────────────────────
-  //
-  // PROBLEM: Different Amazon JSON keys have different URL quality contracts:
-  //   "hiRes"  = true original upload URL (clean or has modifier, always best)
-  //   "large"  = bounded-size URL (e.g. ._SL1500_.) guaranteed by Amazon CDN
-  //   "thumb"  = tiny thumbnail URL
-  //
-  // WRONG approach (caused the bug): stripping modifier from ALL sources.
-  //   For "hiRes" → strip modifier → clean URL → Amazon serves ORIGINAL ✅
-  //   For "large" → strip modifier → clean URL → Amazon may serve DEFAULT
-  //                 size (e.g. 500px) which is WORSE than the original _SL1500_ ❌
-  //
-  // CORRECT approach: different treatment per source:
-  //   "hiRes"  → strip modifier → clean URL → original upload quality
-  //   "large"  → replace modifier with _SL1500_ → guaranteed 1500px
-  //   "thumb"  → replace modifier with _SL1500_ → guaranteed 1500px
-  //   raw scan → replace modifier with _SL1500_ → guaranteed 1500px
-  //
-  // This way: products where ALL images have hiRes → original quality for all.
-  //           Products where SOME images have hiRes=null → 1500px for those.
-
-  // For hiRes source: strip modifier entirely → original upload quality
-  function cleanHiRes(url) {
+  // For Amazon CDN: use _AC_SL1500_ to guarantee 1500px auto-cropped HD quality without excessive white borders
+  function toAmazonHD(url) {
     if (!url || typeof url !== 'string' || !url.startsWith('http')) return null;
+    if (/media-amazon\.com|images-amazon\.com/i.test(url)) {
+      if (/\._[A-Za-z0-9_,]+_\./.test(url)) {
+        return url.replace(/\._[A-Za-z0-9_,]+_\./g, '._AC_SL1500_.');
+      }
+      return url.replace(/\.(jpe?g|png|webp|gif)$/i, '._AC_SL1500_.$1');
+    }
     return url.replace(/\._[A-Za-z0-9_,]+_\./g, '.');
   }
 
-  // For large/thumb/fallback: replace modifier with _SL1500_ → guaranteed 1500px
-  // NOT stripping, because Amazon may not CDN-cache the original for these paths.
+  function cleanHiRes(url) {
+    return toAmazonHD(url);
+  }
+
   function upscaleTo1500(url) {
-    if (!url || typeof url !== 'string' || !url.startsWith('http')) return null;
-    return url.replace(/\._[A-Za-z0-9_,]+_\./g, '._SL1500_.');
+    return toAmazonHD(url);
   }
 
   const seenKeys = new Set();
 
-  // Add image from hiRes source → original quality
   function addHiResImg(url) {
     const clean = cleanHiRes(url);
     if (!clean) return;
@@ -1134,7 +1116,6 @@ function scrapeAmazon() {
     r.images.push(clean);
   }
 
-  // Add image from fallback source → 1500px quality
   function addFallbackImg(url) {
     const sized = upscaleTo1500(url);
     if (!sized) return;
@@ -1144,87 +1125,112 @@ function scrapeAmazon() {
     r.images.push(sized);
   }
 
-  // ── Pass 0: colorImages entries (one entry per gallery image) ─────────
-  // Amazon uses DIFFERENT image IDs for different resolutions of the same
-  // photo (e.g. hiRes 41I8AN0RAgL vs large 21lIynVSvcL). Taking hiRes AND
-  // large from the same entry therefore yields a hi-res + a low-res duplicate
-  // that dedupe cannot detect, and the low-res copies crowd out real images.
-  // Fix: exactly ONE url per entry — hiRes if present, else the largest key
-  // in "main", else "large" upscaled.
+  // ── Active Variant Color Detection ──────────────────────────────────
+  function getActiveAmazonColor() {
+    const sel = document.querySelector('#variation_color_name .selection, #variation_color_name .inline-twister-dim-title-value, #twister .selection');
+    if (sel?.textContent?.trim()) return sel.textContent.trim().toLowerCase();
+    const activeSwatch = document.querySelector('#variation_color_name li.swatchSelect, #variation_color_name li.selected, .inline-twister-swatch.selected');
+    const title = activeSwatch?.getAttribute('title') || activeSwatch?.getAttribute('data-defaultasin') || '';
+    return title.replace(/^click to select\s*/i, '').trim().toLowerCase();
+  }
+
+  // ── Pass 1: Authoritative on-page DOM gallery (strictly active variant) ───
+  const landingImage = document.getElementById('landingImage');
+  if (landingImage) {
+    const dyn = pickAmazonDynamic(landingImage);
+    const hires = landingImage.getAttribute('data-old-hires') || dyn || landingImage.getAttribute('data-zoom-image') || '';
+    if (hires) addHiResImg(hires);
+    else if (landingImage.src) addFallbackImg(landingImage.src);
+  }
+
+  const galleryThumbs = document.querySelectorAll(
+    '#altImages ul li:not(#altImages_videos):not(.videoThumbnail):not([class*="video"]) img, ' +
+    '#altImages .imageThumbnail img, #altImages .a-button-thumbnail img, ' +
+    '#imgTagWrapperId img'
+  );
+  galleryThumbs.forEach(img => {
+    if (img.closest('#rhf, #sims-consolidated-4_feature_div, #sp_detail, #sp_detail2, [id*="recommendation"], [id*="similar"], [class*="recommendation"], [data-a-carousel-options]')) return;
+    const parentLi = img.closest('li, .a-button, [data-dp-image-src], [data-zoom-image]');
+    const hires = img.getAttribute('data-old-hires') || pickAmazonDynamic(img) || img.getAttribute('data-zoom-image') ||
+                  parentLi?.getAttribute('data-zoom-image') || parentLi?.getAttribute('data-old-hires') || '';
+    const fallback = img.getAttribute('data-large-image') || parentLi?.getAttribute('data-dp-image-src') ||
+                     img.src || img.getAttribute('data-src') || '';
+    if (!hires && !fallback) return;
+    const cand = hires || fallback;
+    if (/play[-_]?button|video[-_]?thumbnail|pkplay|360[-_]?icon/i.test(cand)) return;
+
+    if (hires) addHiResImg(hires);
+    else addFallbackImg(fallback);
+  });
+
+  // ── Pass 2: Script extraction (Fallback if DOM gallery incomplete) ────────
   function amazonEntriesFromScripts() {
     const out = [];
-    const q = '\\\\?"';                                  // optional escaped quote
-    const re = new RegExp(q + 'hiRes' + q + '\\s*:\\s*(null|' + q + 'https?:\\/\\/[^"\\\\]+' + q + ')' +
-      '[\\s\\S]{0,600}?' + q + 'large' + q + '\\s*:\\s*' + q + '(https?:\\/\\/[^"\\\\]+)' + q +
-      '(?:[\\s\\S]{0,40}?' + q + 'main' + q + '\\s*:\\s*\\{([\\s\\S]{0,4000}?)\\})?', 'g');
-    for (const script of document.querySelectorAll('script')) {
-      const t = script.textContent || '';
-      if (!t.includes('colorImages') && !t.includes('ImageBlockATF')) continue;
-      let m;
-      while ((m = re.exec(t)) !== null) {
-        const hiRes = m[1] === 'null' ? null : m[1].replace(/^\\?"|\\?"$/g, '');
-        let best = hiRes;
-        if (!best && m[3]) {
-          // pick the largest [w,h] in the main map
-          let bestArea = 0;
-          const mm = /(https?:\/\/[^"\\]+)\\?"\s*:\s*\[(\d+),(\d+)\]/g;
-          let k;
-          while ((k = mm.exec(m[3])) !== null) { const a = (+k[2]) * (+k[3]); if (a > bestArea) { bestArea = a; best = k[1]; } }
+    const scripts = document.querySelectorAll('script');
+    const activeColor = getActiveAmazonColor();
+    const asin = (document.querySelector('input[name="ASIN"], #ASIN')?.value || (location.pathname.match(/\/dp\/([A-Z0-9]{10})/i)?.[1] || '')).toLowerCase();
+
+    for (const script of scripts) {
+      const raw = script.textContent || '';
+      if (!raw.includes('colorImages') && !raw.includes('ImageBlockATF') && !raw.includes('imageGalleryData')) continue;
+
+      const t = raw.replace(/\\\//g, '/').replace(/\\u0022/g, '"').replace(/\\"/g, '"');
+
+      let arr = null;
+      if (activeColor) {
+        const esc = activeColor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const m = t.match(new RegExp('[\'"]' + esc + '[\'"]\\s*:\\s*(\\[\\s*\\{[\\s\\S]*?\\}\\s*\\])', 'i'));
+        if (m) {
+          try { const p = JSON.parse(m[1]); if (Array.isArray(p) && p.length) arr = p; } catch (_) {}
         }
-        out.push({ hiRes, best: best || m[2] });
+      }
+      if (!arr && asin) {
+        const m = t.match(new RegExp('[\'"]' + asin + '[\'"]\\s*:\\s*(\\[\\s*\\{[\\s\\S]*?\\}\\s*\\])', 'i'));
+        if (m) {
+          try { const p = JSON.parse(m[1]); if (Array.isArray(p) && p.length) arr = p; } catch (_) {}
+        }
+      }
+      if (!arr) {
+        const m = t.match(/['"]initial['"]\s*:\s*(\[\s*\{[\s\S]*?\}\s*\])/i);
+        if (m) {
+          try { const p = JSON.parse(m[1]); if (Array.isArray(p) && p.length) arr = p; } catch (_) {}
+        }
+      }
+
+      if (arr && Array.isArray(arr)) {
+        for (const item of arr) {
+          const hiRes = item.hiRes || null;
+          let best = hiRes || item.large || null;
+          if (!best && item.main && typeof item.main === 'object') {
+            const keys = Object.keys(item.main);
+            if (keys.length) best = keys[0];
+          }
+          if (hiRes || best) out.push({ hiRes, best: best || hiRes });
+        }
       }
       if (out.length) break;
     }
     return out;
   }
-  const entries = amazonEntriesFromScripts();
-  entries.forEach(e => { if (e.hiRes) addHiResImg(e.hiRes); else addFallbackImg(e.best); });
 
-  // ── DOM gallery fallback: one url per <img>, best candidate only ───────
+  // Always enrich with script data (contains authoritative colorImages/ImageBlockATF HD gallery)
+  const scriptEntries = amazonEntriesFromScripts();
+  scriptEntries.forEach(e => {
+    if (e.hiRes) addHiResImg(e.hiRes);
+    else if (e.best) addFallbackImg(e.best);
+  });
+
+  // ── Pass 3: Raw Amazon CDN URL scan (strict fallback only) ─────────
   if (r.images.length === 0) {
-    document.querySelectorAll('#landingImage, #imgTagWrapperId img, #altImages img, .a-button-thumbnail img, .imageThumbnail img').forEach(img => {
-      const hires = img.getAttribute('data-old-hires') || '';
-      const cand = hires || pickAmazonDynamic(img) || img.getAttribute('data-zoom-image') || img.getAttribute('data-large-image') || img.src || img.getAttribute('data-src') || '';
-      if (!cand || /play[-_]?button|video[-_]?thumbnail|pkplay/i.test(cand)) return;
-      if (hires) addHiResImg(cand); else addFallbackImg(cand);
-    });
-  }
-
-  // Pass 2: Raw Amazon CDN URL scan — only if targeted script extraction found nothing.
-  if (r.images.length === 0) for (const script of scripts) {
-    const t = script.textContent || '';
-    const rawScan = /https:\/\/(?:m\.media-amazon\.com|images-amazon\.com)\/images\/I\/[A-Za-z0-9%+\-_.]+\.(?:jpg|jpeg|png|webp)/g;
-    let match;
-    while ((match = rawScan.exec(t)) !== null) addFallbackImg(match[0]);
-  }
-
-  // Pass 3 (DOM fallback): used when script scans yield nothing (rare).
-  if (r.images.length === 0) {
-    const landingImage = document.getElementById('landingImage');
-    if (landingImage) {
-      const oldHires = landingImage.getAttribute('data-old-hires');
-      if (oldHires) addHiResImg(oldHires);  // data-old-hires = true hi-res
-      else addFallbackImg(landingImage.src); // src = fallback
+    const allScripts = document.querySelectorAll('script');
+    for (const script of allScripts) {
+      const t = script.textContent || '';
+      if (!t.includes('colorImages') && !t.includes('ImageBlockATF') && !t.includes('imageGalleryData')) continue;
+      const rawScan = /https:\/\/(?:m\.media-amazon\.com|images-amazon\.com)\/images\/I\/[A-Za-z0-9%+\-_.]+\.(?:jpg|jpeg|png|webp)/g;
+      let match;
+      while ((match = rawScan.exec(t)) !== null) addFallbackImg(match[0]);
+      if (r.images.length >= 8) break;
     }
-
-    document.querySelectorAll('.a-button-thumbnail img').forEach(img => {
-      addHiResImg(img.getAttribute('data-old-hires') || '');
-      addFallbackImg(pickAmazonDynamic(img) || img.src || '');
-    });
-
-    const imgEls = document.querySelectorAll(
-      '#altImages img, #imgTagWrapperId img, #imageBlock img, .imageThumbnail img'
-    );
-    imgEls.forEach(img => {
-      if (img.closest('[class*="review"]')) return;
-      addHiResImg(img.getAttribute('data-old-hires') || '');
-      addFallbackImg(
-        pickAmazonDynamic(img) ||
-        img.getAttribute('data-zoom-image') ||
-        img.getAttribute('data-large-image') ||
-        img.src || img.getAttribute('data-src') || ''
-      );
-    });
   }
 
 
@@ -2964,6 +2970,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return [];
   }
 
+  function cardPlatformVideos() {
+    try {
+      const normalizedHost = h.replace(/^www\./, '');
+      if (normalizedHost.includes('amazon.')) return dedupeVideos(scrapeAmazon().videos || []);
+      if (normalizedHost === 'walmart.com' || normalizedHost.endsWith('.walmart.com')) return dedupeVideos(scrapeWalmart().videos || []);
+      if (normalizedHost === 'samsclub.com' || normalizedHost.endsWith('.samsclub.com')) return dedupeVideos(scrapeSamsClub().videos || []);
+    } catch (_) {}
+    return [];
+  }
+
+  function collectPageVideos() {
+    const platformVideos = cardPlatformVideos();
+    const domVideos = collectDomVideos();
+    return dedupeVideos([...platformVideos, ...domVideos]).slice(0, 20);
+  }
+
   function collectPageImages() {
     // The marketplace scrapers use verified gallery/state paths first. This
     // keeps recommendation media out while recovering lazy/variant images.
@@ -2982,6 +3004,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     };
     const addElement = (el) => {
       if (!el || (el.tagName === 'IMG' && isBadImageElement(el))) return;
+      // Filter out recommendation / sponsored / carousel containers
+      if (el.closest?.('#rhf, #sims-consolidated-4_feature_div, #sp_detail, #sp_detail2, [id*="recommendation"], [id*="similar"], [class*="recommendation"], [data-a-carousel-options], [class*="ad-"], [id*="ad-"], .a-carousel-container:not(#altImages .a-carousel-container):not(#main-image-container .a-carousel-container)')) return;
       ['data-old-hires', 'data-zoom-image', 'data-image-url', 'data-image-src',
        'data-large-image', 'data-src', 'data-lazy-src', 'data-original', 'src']
         .forEach(attr => push(el.getAttribute?.(attr) || ''));
@@ -2999,8 +3023,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       '[data-testid="zoom-panel"] img, [data-automation-id="product-media"] img',
       '[class*="product-gallery"] img, [class*="ProductGallery"] img',
       '[class*="product-image"] img, [class*="ProductImage"] img',
-      '[class*="carousel"] img, [class*="gallery"] img',
-      'img[data-zoom-image], img[data-image-url], img[data-image-src], img[data-lazy-src]'
+      '#main-image-container img', '#imageBlock img'
     ];
     const gallery = document.querySelectorAll(gallerySelectors.join(', '));
     gallery.forEach(addElement);
@@ -3010,19 +3033,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   // ── Download helper ──────────────────────────────────────────
   function downloadViaBackground(url, filename) {
-    chrome.runtime.sendMessage({ action: 'FETCH_BASE64', url }, res => {
-      if (chrome.runtime.lastError || !res?.base64) {
-        // Fallback: open in new tab (CDN blocks direct anchor downloads)
-        window.open(url, '_blank');
-        return;
-      }
-      // res.base64 is already a full data URL (data:image/jpeg;base64,...)
-      // Do NOT wrap it again — that creates an invalid double-prefixed URL
-      const dataUrl = res.base64.startsWith('data:') ? res.base64 : `data:image/jpeg;base64,${res.base64}`;
-      const a = document.createElement('a');
-      a.href = dataUrl; a.download = filename;
-      document.body.appendChild(a); a.click();
-      setTimeout(() => a.remove(), 500);
+    if (!url) return;
+    chrome.runtime.sendMessage({ action: 'DOWNLOAD_FILE', url, filename }, res => {
+      if (res?.success) return;
+      // Fallback: fetch base64
+      chrome.runtime.sendMessage({ action: 'FETCH_BASE64', url }, res2 => {
+        if (chrome.runtime.lastError || !res2?.base64) {
+          window.open(url, '_blank');
+          return;
+        }
+        const dataUrl = res2.base64.startsWith('data:') ? res2.base64 : `data:image/jpeg;base64,${res2.base64}`;
+        const a = document.createElement('a');
+        a.href = dataUrl; a.download = filename;
+        document.body.appendChild(a); a.click();
+        setTimeout(() => a.remove(), 500);
+      });
     });
   }
 
@@ -3400,115 +3425,100 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .status-bar.ok  { color: #34d399; text-shadow: 0 0 8px rgba(52,211,153,0.4); }
       .status-bar.err { color: #f87171; }
 
-      /* ── Mini FAB ────────────────────────────────────────── */
-      .mini-widget-wrap {
-        position: relative;
-        width: 58px; height: 58px;
-        display: flex; align-items: center; justify-content: center;
+      /* ── Tabs in Header ── */
+      .header-tabs {
+        display: flex; gap: 5px; margin-top: 3px;
       }
-      .mini-ring {
-        position: absolute; inset: 0; border-radius: 50%;
-        background: conic-gradient(from 0deg, #ff3d00, #ffea00, #00e5ff, #d500f9, #ff3d00);
-        animation: zh-spin 3s linear infinite;
-        z-index: 0;
-      }
-      .mini-glow {
-        position: absolute; inset: 0; border-radius: 50%;
-        background: conic-gradient(from 0deg, #ff3d00, #ffea00, #00e5ff, #d500f9, #ff3d00);
-        animation: zh-spin 3s linear infinite;
-        filter: blur(8px); opacity: 0.55;
-        transition: opacity 0.25s, filter 0.25s;
-        z-index: 0;
-      }
-      .mini-widget-wrap:hover .mini-glow { filter: blur(14px); opacity: 0.85; }
-      .mini-widget {
-        width: 52px; height: 52px;
-        border-radius: 50%;
-        position: relative; z-index: 1;
-        display: flex; align-items: center; justify-content: center;
-        cursor: pointer; user-select: none; touch-action: none;
-        background: radial-gradient(circle at 38% 32%, rgba(0,229,255,0.12) 0%, rgba(5,10,24,0.98) 70%);
-        box-shadow: 0 4px 16px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
-        transition: transform 0.22s cubic-bezier(0.16,1,0.3,1), box-shadow 0.22s;
-        border: none; outline: none;
-      }
-      .mini-widget:hover { transform: scale(1.07); }
-      .mini-widget:active { transform: scale(0.93); }
-      .mini-widget img {  .mini-widget:active { transform: scale(0.93); }r-events: none;
-      }
-      .img-wrap.selected .img-check {
-        background: #00e5ff; border-color: #00e5ff;
-        box-shadow: 0 0 8px rgba(0,229,255,0.6);
-      }
-      .img-wrap.selected .img-check::after {
-        content: '';
-        width: 4px; height: 7px;
-        border: solid #000; border-width: 0 2px 2px 0;
-        transform: rotate(45deg); margin-bottom: 2px;
-        animation: zh-check-pop 0.22s cubic-bezier(0.16,1,0.3,1);
-      }
-      .img-idx {
-        position: absolute; bottom: 5px; right: 5px;
-        font-size: 9px; font-weight: 800; color: rgba(255,255,255,0.9);
-        background: rgba(5,10,24,0.6);
+      .tab-btn {
+        background: rgba(255,255,255,0.06);
         border: 1px solid rgba(255,255,255,0.12);
-        backdrop-filter: blur(6px);
-        padding: 1px 5px; border-radius: 5px;
+        color: rgba(255,255,255,0.7);
+        font-size: 9.5px; font-weight: 700;
+        padding: 2.5px 7px; border-radius: 5px;
+        cursor: pointer; transition: all 0.18s ease;
+        display: flex; align-items: center; gap: 3px;
+        font-family: inherit; outline: none;
       }
-
-      /* ── Footer ──────────────────────────────────────────── */
-      .footer {
-        padding: 9px 10px 10px;
-        border-top: 1px solid rgba(255,255,255,0.06);
-        background: rgba(0,0,0,0.2);
-        display: flex; gap: 6px; align-items: center;
-      }
-      .btn-sm {
-        padding: 6px 11px; border-radius: 8px;
-        font-size: 10px; font-weight: 700; letter-spacing: 0.2px;
-        cursor: pointer; border: 1px solid transparent;
-        font-family: inherit; white-space: nowrap;
-        transition: all 0.18s cubic-bezier(0.16,1,0.3,1);
-        position: relative; overflow: hidden;
-      }
-      .btn-sm:active { transform: scale(0.93) !important; }
-      .btn-ghost {
-        background: rgba(255,255,255,0.05);
-        border-color: rgba(255,255,255,0.1);
-        color: #94a3b8;
-      }
-      .btn-ghost:hover {
-        background: rgba(0,229,255,0.09);
-        border-color: rgba(0,229,255,0.35);
+      .tab-btn:hover {
+        background: rgba(0,229,255,0.12);
         color: #00e5ff;
-        transform: translateY(-1px);
+        border-color: rgba(0,229,255,0.3);
       }
-      .btn-dl {
-        flex: 1;
-        background: linear-gradient(90deg, #0ea5e9, #00e5ff, #0ea5e9);
-        background-size: 200% auto;
-        color: #000; font-weight: 900;
-        box-shadow: 0 2px 10px rgba(0,229,255,0.3);
-        transition: all 0.3s cubic-bezier(0.16,1,0.3,1);
+      .tab-btn.active {
+        background: linear-gradient(135deg, rgba(0,229,255,0.25), rgba(0,229,255,0.08));
+        border-color: #00e5ff;
+        color: #e0f7fa;
+        box-shadow: 0 0 8px rgba(0,229,255,0.3);
       }
-      .btn-dl:not(:disabled):hover {
-        background-position: right center;
-        box-shadow: 0 4px 18px rgba(0,229,255,0.5);
-        transform: translateY(-1px);
-        animation: zh-btn-shine 1.4s linear infinite;
-      }
-      .btn-dl:not(:disabled):active { transform: translateY(1px) scale(0.97); }
-      .btn-dl:disabled { opacity: 0.25; cursor: not-allowed; background: rgba(255,255,255,0.08); box-shadow: none; }
 
-      /* ── Status bar ──────────────────────────────────────── */
-      .status-bar {
-        padding: 4px 12px 8px;
-        font-size: 10px; color: rgba(148,163,184,0.5);
-        text-align: center; min-height: 20px;
-        transition: color 0.3s;
+      /* ── Video Grid & Card Styles ── */
+      .vid-list {
+        display: flex; flex-direction: column; gap: 7px;
       }
-      .status-bar.ok  { color: #34d399; text-shadow: 0 0 8px rgba(52,211,153,0.4); }
-      .status-bar.err { color: #f87171; }
+      .vid-card {
+        position: relative;
+        background: rgba(255,255,255,0.03);
+        border: 1.5px solid rgba(255,255,255,0.08);
+        border-radius: 9px;
+        overflow: hidden;
+        padding: 7px;
+        display: flex; gap: 9px; align-items: center;
+        transition: all 0.18s ease;
+        cursor: pointer;
+      }
+      .vid-card:hover {
+        border-color: rgba(0,229,255,0.4);
+        background: rgba(0,229,255,0.04);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      }
+      .vid-card.selected {
+        border-color: #00e5ff;
+        background: rgba(0,229,255,0.08);
+        box-shadow: 0 0 0 1px rgba(0,229,255,0.35);
+      }
+      .vid-thumb {
+        position: relative;
+        width: 68px; height: 46px;
+        background: #000;
+        border-radius: 6px;
+        overflow: hidden;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+      }
+      .vid-thumb video, .vid-thumb img {
+        width: 100%; height: 100%; object-fit: cover;
+      }
+      .vid-play-icon {
+        position: absolute; inset: 0;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(0,0,0,0.45);
+        color: #fff; font-size: 16px;
+        transition: transform 0.18s, color 0.18s;
+      }
+      .vid-card:hover .vid-play-icon { transform: scale(1.15); color: #00e5ff; }
+      .vid-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+      .vid-name {
+        font-size: 10px; font-weight: 700; color: #e0f7fa;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .vid-meta { display: flex; gap: 4px; align-items: center; }
+      .vid-tag {
+        font-size: 8px; font-weight: 800; padding: 1px 5px; border-radius: 4px;
+        background: rgba(0,229,255,0.15); color: #00e5ff; border: 1px solid rgba(0,229,255,0.3);
+      }
+      .vid-card-actions { display: flex; gap: 5px; align-items: center; flex-shrink: 0; }
+      .vid-single-dl {
+        width: 26px; height: 26px; border-radius: 6px;
+        background: linear-gradient(135deg, #00e5ff, #0091ea);
+        color: #050a18; border: none; font-size: 12px; font-weight: 900;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+      }
+      .vid-single-dl:hover { transform: scale(1.1); box-shadow: 0 0 10px rgba(0,229,255,0.5); }
+      .vid-preview-player {
+        width: 100%; height: 160px; border-radius: 8px; background: #000;
+        margin-bottom: 8px; outline: none;
+      }
 
       /* ── Mini FAB ────────────────────────────��───────────── */
       .mini-widget-wrap {
@@ -3652,12 +3662,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       <div class="header-left">
         <div class="header-icon"><img src="${chrome.runtime.getURL('icon48.png')}" alt="ZH" onerror="this.style.display='none';this.parentNode.textContent='ZH'"></div>
         <div class="header-info">
-          <span class="header-title">ZHunter Images</span>
-          <span class="header-sub" id="zh-header-sub">Scanning page&hellip;</span>
+          <span class="header-title">ZHunter Media</span>
+          <div class="header-tabs">
+            <button class="tab-btn active" id="zh-tab-images" type="button">📷 Images (<span id="zh-img-count">0</span>)</button>
+            <button class="tab-btn" id="zh-tab-videos" type="button">🎬 Videos (<span id="zh-vid-count">0</span>)</button>
+          </div>
         </div>
       </div>
       <div class="header-right">
-        <span class="header-count" id="zh-img-count">0</span>
         <button class="toggle-btn" id="zh-toggle-btn" title="Minimize" aria-label="Minimize panel">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             <path d="M9 3L6 6L9 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -3671,7 +3683,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const body = document.createElement('div');
     body.className = 'body';
     body.id = 'zh-img-body';
-    body.innerHTML = `<div class="empty">\uD83D\uDD0D Scanning images...</div>`;
+    body.innerHTML = `<div class="empty">\uD83D\uDD0D Scanning media...</div>`;
     panel.appendChild(body);
 
     // ── Footer
@@ -3706,7 +3718,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     // ── State
     let images = [];
+    let videos = [];
     let selected = new Set();
+    let selectedVideos = new Set();
+    let activeTab = 'images'; // 'images' | 'videos'
     const imageDims = new Map(); // cache detected dimensions
     let collapsed = true;
     let widgetPosition = { top: null, bottom: 20, left: null, right: 20 };
@@ -3716,18 +3731,40 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     let dragOrigin = { x: 0, y: 0 };
     const WIDGET_STATE_KEY = 'zhunterImageWidgetState';
 
-    const toggleBtn = shadow.getElementById('zh-toggle-btn');
-    const countEl   = shadow.getElementById('zh-img-count');
-    const miniCount = miniCountEl; // from wrapper
-    const zipBtn    = shadow.getElementById('zh-zip-btn');
-    const dlBtn     = shadow.getElementById('zh-dl-btn');
-    const status    = shadow.getElementById('zh-status');
+    const toggleBtn    = shadow.getElementById('zh-toggle-btn');
+    const countEl      = shadow.getElementById('zh-img-count');
+    const vidCountEl   = shadow.getElementById('zh-vid-count');
+    const tabImagesBtn = shadow.getElementById('zh-tab-images');
+    const tabVideosBtn = shadow.getElementById('zh-tab-videos');
+    const hdFilterBtn  = shadow.getElementById('zh-sel-hd');
+    const miniCount    = miniCountEl; // from wrapper
+    const zipBtn       = shadow.getElementById('zh-zip-btn');
+    const dlBtn        = shadow.getElementById('zh-dl-btn');
+    const status       = shadow.getElementById('zh-status');
+
+    tabImagesBtn?.addEventListener('click', () => {
+      if (activeTab === 'images') return;
+      activeTab = 'images';
+      tabImagesBtn.classList.add('active');
+      tabVideosBtn?.classList.remove('active');
+      if (hdFilterBtn) hdFilterBtn.style.display = 'inline-block';
+      renderGrid();
+    });
+
+    tabVideosBtn?.addEventListener('click', () => {
+      if (activeTab === 'videos') return;
+      activeTab = 'videos';
+      tabVideosBtn.classList.add('active');
+      tabImagesBtn?.classList.remove('active');
+      if (hdFilterBtn) hdFilterBtn.style.display = 'none';
+      renderVideoGrid();
+    });
 
     // Helper: pulse badge when count changes
     let _lastMiniCount = 0;
     function pulseMiniCount(n) {
       miniCount.textContent = n > 99 ? '99+' : String(n);
-      miniTooltip.textContent = `ZHunter — ${n} image${n !== 1 ? 's' : ''}`;
+      miniTooltip.textContent = `ZHunter — ${n} media item${n !== 1 ? 's' : ''}`;
       if (n !== _lastMiniCount && n > 0) {
         miniCount.classList.remove('pulse');
         void miniCount.offsetWidth; // reflow to restart animation
@@ -3739,103 +3776,91 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     const saveWidgetState = () => {
       chrome.storage.local.set({ [WIDGET_STATE_KEY]: {
-        // Never save collapsed state — card always starts minimized on each page
         top: widgetPosition.top,
         bottom: widgetPosition.bottom,
         left: widgetPosition.left,
         right: widgetPosition.right
       } }).catch(() => {});
     };
-    const applyWidgetPosition = () => {
-      const widgetHeight = collapsed ? 60 : 384;
-      const widgetWidth = collapsed ? 60 : 300;
 
-      if (Number.isFinite(widgetPosition.top) && Number.isFinite(widgetPosition.left)) {
-        const maxTop = Math.max(8, window.innerHeight - widgetHeight - 8);
-        const maxLeft = Math.max(8, window.innerWidth - widgetWidth - 8);
-        const clampedTop = Math.max(8, Math.min(widgetPosition.top, maxTop));
-        const clampedLeft = Math.max(8, Math.min(widgetPosition.left, maxLeft));
-        root.style.top = `${clampedTop}px`;
-        root.style.left = `${clampedLeft}px`;
-        root.style.bottom = 'auto';
-        root.style.right = 'auto';
-      } else {
-        root.style.top = 'auto';
-        root.style.left = 'auto';
-        root.style.bottom = '20px';
-        root.style.right = '20px';
-      }
-    };
-    const SVG_CHEVRON_LEFT  = `<svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 2L3 5L7 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-    const SVG_CHEVRON_RIGHT = `<svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 2L7 5L3 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-
-    const applyCollapsedState = () => {
-      panelWrap.classList.toggle('collapsed', collapsed);
-      miniWrap.style.display = collapsed ? 'flex' : 'none';
-      toggleBtn.innerHTML = collapsed ? SVG_CHEVRON_RIGHT : SVG_CHEVRON_LEFT;
-      toggleBtn.title = collapsed ? 'Expand' : 'Minimize';
-      pulseMiniCount(images.length); // always sync tooltip + badge
-      applyWidgetPosition();
-    };
-    const setCollapsed = value => {
-      collapsed = !!value;
-      // When minimizing, always snap back to bottom-right corner
-      if (collapsed) {
-        widgetPosition = { top: null, bottom: 20, left: null, right: 20 };
-      }
-      applyCollapsedState();
-      saveWidgetState();
-    };
-
-    const beginDrag = (event, target) => {
-      if (event.button !== undefined && event.button !== 0) return;
-      const rect = root.getBoundingClientRect();
+    // ── Drag logic
+    const beginDrag = (event, element) => {
       dragging = true;
       dragMoved = false;
       dragOrigin = { x: event.clientX, y: event.clientY };
+      const rect = element.getBoundingClientRect();
       dragOffset = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-      try { target?.setPointerCapture?.(event.pointerId); } catch (_) {}
-      document.body.style.userSelect = 'none';
-      event.preventDefault();
+      try { element.setPointerCapture(event.pointerId); } catch (_) {}
     };
 
     const handlePointerMove = event => {
       if (!dragging) return;
-      const dist = Math.hypot(event.clientX - dragOrigin.x, event.clientY - dragOrigin.y);
-      if (dist > 8) {
-        dragMoved = true;
-        const widgetHeight = collapsed ? 60 : 384;
-        const widgetWidth = collapsed ? 60 : 300;
-        widgetPosition.left = Math.max(8, Math.min(event.clientX - dragOffset.x, window.innerWidth - widgetWidth - 8));
-        widgetPosition.top = Math.max(8, Math.min(event.clientY - dragOffset.y, window.innerHeight - widgetHeight - 8));
-        widgetPosition.bottom = null;
-        widgetPosition.right = null;
-        applyWidgetPosition();
-      }
+      const dx = event.clientX - dragOrigin.x;
+      const dy = event.clientY - dragOrigin.y;
+      if (Math.hypot(dx, dy) > 4) dragMoved = true;
+      if (!dragMoved) return;
+
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const currentElement = collapsed ? miniWrap : panelWrap;
+      const width = currentElement.offsetWidth;
+      const height = currentElement.offsetHeight;
+
+      let nextLeft = event.clientX - dragOffset.x;
+      let nextTop = event.clientY - dragOffset.y;
+      nextLeft = Math.max(10, Math.min(viewportWidth - width - 10, nextLeft));
+      nextTop = Math.max(10, Math.min(viewportHeight - height - 10, nextTop));
+
+      widgetPosition = {
+        top: Math.round(nextTop),
+        bottom: null,
+        left: Math.round(nextLeft),
+        right: null
+      };
+
+      root.style.top = `${widgetPosition.top}px`;
+      root.style.bottom = 'auto';
+      root.style.left = `${widgetPosition.left}px`;
+      root.style.right = 'auto';
     };
 
-    const endDrag = (event, target) => {
+    const endDrag = (event, element) => {
       if (!dragging) return false;
-      const wasMoved = dragMoved;
       dragging = false;
-      dragMoved = false;
-      document.body.style.userSelect = '';
-      try { target?.releasePointerCapture?.(event.pointerId); } catch (_) {}
-      saveWidgetState();
-      return wasMoved;
+      try { element.releasePointerCapture(event.pointerId); } catch (_) {}
+      if (dragMoved) saveWidgetState();
+      return dragMoved;
     };
 
-    // Header dragging (open panel)
+    const applyCollapsedState = () => {
+      if (collapsed) {
+        panelWrap.classList.add('collapsed');
+        miniWrap.style.display = 'flex';
+      } else {
+        panelWrap.classList.remove('collapsed');
+        miniWrap.style.display = 'none';
+      }
+      root.style.top = widgetPosition.top !== null ? `${widgetPosition.top}px` : 'auto';
+      root.style.bottom = widgetPosition.bottom !== null ? `${widgetPosition.bottom}px` : 'auto';
+      root.style.left = widgetPosition.left !== null ? `${widgetPosition.left}px` : 'auto';
+      root.style.right = widgetPosition.right !== null ? `${widgetPosition.right}px` : 'auto';
+    };
+
+    const setCollapsed = value => {
+      if (collapsed === value) return;
+      collapsed = value;
+      applyCollapsedState();
+      saveWidgetState();
+    };
+
     header.addEventListener('pointerdown', event => {
-      if (event.target === toggleBtn || toggleBtn.contains(event.target)) return;
+      if (event.target.closest('#zh-toggle-btn') || event.target.closest('.tab-btn')) return;
+      if (event.button !== 0) return;
       beginDrag(event, header);
     });
     header.addEventListener('pointermove', handlePointerMove);
-    header.addEventListener('pointerup', event => {
-      endDrag(event, header);
-    });
+    header.addEventListener('pointerup', event => endDrag(event, header));
 
-    // Mini widget dragging (collapsed button)
     miniWrap.addEventListener('pointerdown', event => {
       if (event.button !== 0) return;
       beginDrag(event, miniWrap);
@@ -3843,40 +3868,34 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     miniWrap.addEventListener('pointermove', handlePointerMove);
     miniWrap.addEventListener('pointerup', event => {
       const moved = endDrag(event, miniWrap);
-      if (!moved) {
-        // Pure click — open the card
-        setCollapsed(false);
-      }
+      if (!moved) setCollapsed(false);
     });
-    miniWrap.addEventListener('click', event => {
-      event.stopPropagation();
-    });
+    miniWrap.addEventListener('click', event => event.stopPropagation());
 
-    // Minimize button in card header
     toggleBtn.addEventListener('click', event => {
       event.stopPropagation();
       setCollapsed(true);
     });
 
-    // Every new page: always start minimized at bottom-right — no state restore
     collapsed = true;
     widgetPosition = { top: null, bottom: 20, left: null, right: 20 };
     applyCollapsedState();
 
-    // ── Render grid
+    // ── Render images grid
     function renderGrid() {
       const b = shadow.getElementById('zh-img-body');
       const subEl = shadow.getElementById('zh-header-sub');
       if (!images.length) {
         b.innerHTML = `<div class="empty">🔍 No product images found<br><span style="font-size:9px;opacity:0.6">Navigate to a product page to scan</span></div>`;
-        countEl.textContent = '0';
+        if (countEl) countEl.textContent = '0';
         if (subEl) subEl.textContent = 'No images found';
-        pulseMiniCount(0);
+        pulseMiniCount(videos.length);
+        updateDlBtn();
         return;
       }
-      countEl.textContent = images.length;
+      if (countEl) countEl.textContent = images.length;
       if (subEl) subEl.textContent = `${selected.size} of ${images.length} selected`;
-      pulseMiniCount(images.length);
+      pulseMiniCount(images.length + videos.length);
       const grid = document.createElement('div');
       grid.className = 'grid';
 
@@ -3926,10 +3945,95 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       updateDlBtn();
     }
 
-    function updateDlBtn() {
-      const n = selected.size;
+    // ── Render videos list
+    function renderVideoGrid() {
+      const b = shadow.getElementById('zh-img-body');
       const subEl = shadow.getElementById('zh-header-sub');
-      if (subEl) subEl.textContent = `${n} of ${images.length} selected`;
+      if (!videos.length) {
+        b.innerHTML = `<div class="empty">🎬 No product videos found<br><span style="font-size:9px;opacity:0.6">Videos will appear here if available</span></div>`;
+        if (vidCountEl) vidCountEl.textContent = '0';
+        if (subEl) subEl.textContent = 'No videos found';
+        updateDlBtn();
+        return;
+      }
+      if (vidCountEl) vidCountEl.textContent = videos.length;
+      if (subEl) subEl.textContent = `${selectedVideos.size} of ${videos.length} selected`;
+
+      const list = document.createElement('div');
+      list.className = 'vid-list';
+      const productSlug = (document.title || 'product').replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 30) || 'product';
+
+      videos.forEach((url, i) => {
+        const isHls = /\.m3u8/i.test(url);
+        const isWebm = /\.webm/i.test(url);
+        const tag = isHls ? 'HLS Stream' : isWebm ? 'WebM' : 'MP4 Video';
+        const card = document.createElement('div');
+        card.className = 'vid-card' + (selectedVideos.has(i) ? ' selected' : '');
+        card.innerHTML = `
+          <div class="vid-thumb" title="Click to preview video">
+            <video src="${url}" preload="metadata" muted playsinline></video>
+            <div class="vid-play-icon">▶</div>
+          </div>
+          <div class="vid-info">
+            <div class="vid-name" title="${url}">Product Video #${i + 1}</div>
+            <div class="vid-meta">
+              <span class="vid-tag">${tag}</span>
+            </div>
+          </div>
+          <div class="vid-card-actions">
+            <button class="vid-single-dl" title="Download video" type="button">↓</button>
+            <div class="img-check" style="position:static;width:18px;height:18px;"></div>
+          </div>
+        `;
+
+        card.querySelector('.vid-thumb').addEventListener('click', (e) => {
+          e.stopPropagation();
+          const existing = list.querySelector('.vid-preview-player');
+          if (existing && existing.dataset.idx === String(i)) {
+            existing.remove();
+            return;
+          }
+          list.querySelectorAll('.vid-preview-player').forEach(p => p.remove());
+          const player = document.createElement('video');
+          player.className = 'vid-preview-player';
+          player.dataset.idx = String(i);
+          player.src = url;
+          player.controls = true;
+          player.autoplay = true;
+          card.insertAdjacentElement('afterend', player);
+        });
+
+        card.querySelector('.vid-single-dl').addEventListener('click', (e) => {
+          e.stopPropagation();
+          const ext = isHls ? 'mp4' : isWebm ? 'webm' : 'mp4';
+          const filename = `${productSlug}-video${i + 1}.${ext}`;
+          downloadViaBackground(url, filename);
+          status.className = 'status-bar ok';
+          status.textContent = `Downloading video #${i + 1}...`;
+          setTimeout(() => { status.textContent = ''; status.className = 'status-bar'; }, 3000);
+        });
+
+        card.addEventListener('click', () => {
+          if (selectedVideos.has(i)) selectedVideos.delete(i);
+          else selectedVideos.add(i);
+          card.classList.toggle('selected', selectedVideos.has(i));
+          updateDlBtn();
+        });
+
+        list.appendChild(card);
+      });
+
+      b.innerHTML = '';
+      b.appendChild(list);
+      updateDlBtn();
+    }
+
+    function updateDlBtn() {
+      const isImg = activeTab === 'images';
+      const n = isImg ? selected.size : selectedVideos.size;
+      const total = isImg ? images.length : videos.length;
+      const subEl = shadow.getElementById('zh-header-sub');
+      if (subEl) subEl.textContent = `${n} of ${total} selected`;
 
       const zipCount = shadow.getElementById('zh-zip-count');
       const dlCount  = shadow.getElementById('zh-dl-count');
@@ -3939,7 +4043,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (dlBtn) {
         dlBtn.disabled = n === 0;
         dlBtn.classList.remove('busy');
-        if (dlLabel) dlLabel.textContent = 'Save Files';
+        if (dlLabel) dlLabel.textContent = isImg ? 'Save Files' : 'Save Videos';
         if (dlCount) {
           dlCount.textContent = n;
           dlCount.style.display = n > 0 ? 'inline-block' : 'none';
@@ -3948,7 +4052,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (zipBtn) {
         zipBtn.disabled = n === 0;
         zipBtn.classList.remove('busy');
-        if (zipLabel) zipLabel.textContent = 'ZIP Archive';
+        if (zipLabel) zipLabel.textContent = isImg ? 'ZIP Archive' : 'ZIP Videos';
         if (zipCount) {
           zipCount.textContent = n;
           zipCount.style.display = n > 0 ? 'inline-block' : 'none';
@@ -3958,14 +4062,25 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     // ── Select All / None / HD
     shadow.getElementById('zh-sel-all')?.addEventListener('click', () => {
-      images.forEach((_, i) => selected.add(i));
-      renderGrid();
+      if (activeTab === 'images') {
+        images.forEach((_, i) => selected.add(i));
+        renderGrid();
+      } else {
+        videos.forEach((_, i) => selectedVideos.add(i));
+        renderVideoGrid();
+      }
     });
     shadow.getElementById('zh-sel-none')?.addEventListener('click', () => {
-      selected.clear();
-      renderGrid();
+      if (activeTab === 'images') {
+        selected.clear();
+        renderGrid();
+      } else {
+        selectedVideos.clear();
+        renderVideoGrid();
+      }
     });
     shadow.getElementById('zh-sel-hd')?.addEventListener('click', () => {
+      if (activeTab !== 'images') return;
       selected.clear();
       images.forEach((url, i) => {
         const dim = imageDims.get(i);
@@ -3980,13 +4095,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     // ── 📦 Download as ZIP Archive (v9.1)
     zipBtn?.addEventListener('click', async () => {
-      if (!selected.size) return;
+      const isImg = activeTab === 'images';
+      const targetSet = isImg ? selected : selectedVideos;
+      if (!targetSet.size) return;
       zipBtn.disabled = true;
       zipBtn.classList.add('busy');
       if (dlBtn) dlBtn.disabled = true;
       const zipLabel = shadow.getElementById('zh-zip-label');
-      const toDownload = [...selected].sort();
-      const productSlug = document.title.replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 30) || 'product';
+      const toDownload = [...targetSet].sort();
+      const productSlug = (document.title || 'product').replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 30) || 'product';
 
       status.className = 'status-bar';
       status.textContent = `Packing ZIP: 0 / ${toDownload.length}...`;
@@ -4000,19 +4117,30 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         let packed = 0;
 
         for (const idx of toDownload) {
-          const url = images[idx];
-          const ext = url.match(/\.(jpe?g|png|webp|gif)/i)?.[1] || 'jpg';
-          const filename = `${productSlug}-img${idx + 1}.${ext}`;
+          const url = isImg ? images[idx] : videos[idx];
+          const ext = isImg
+            ? (url.match(/\.(jpe?g|png|webp|gif)/i)?.[1] || 'jpg')
+            : (url.match(/\.(mp4|webm|m4v|mov)/i)?.[1] || 'mp4');
+          const prefix = isImg ? 'img' : 'video';
+          const filename = `${productSlug}-${prefix}${idx + 1}.${ext}`;
 
           try {
-            const base64Res = await new Promise(resolve => {
-              chrome.runtime.sendMessage({ action: 'FETCH_BASE64', url }, res => resolve(res));
-            });
-
-            if (base64Res?.base64) {
-              const rawData = base64Res.base64.replace(/^data:[^;]+;base64,/, '');
-              zip.file(filename, rawData, { base64: true });
-              packed++;
+            if (isImg) {
+              const base64Res = await new Promise(resolve => {
+                chrome.runtime.sendMessage({ action: 'FETCH_BASE64', url }, res => resolve(res));
+              });
+              if (base64Res?.base64) {
+                const rawData = base64Res.base64.replace(/^data:[^;]+;base64,/, '');
+                zip.file(filename, rawData, { base64: true });
+                packed++;
+              }
+            } else {
+              const vResp = await fetch(url, { credentials: 'omit' });
+              if (vResp.ok) {
+                const vBuf = await vResp.arrayBuffer();
+                zip.file(filename, vBuf);
+                packed++;
+              }
             }
           } catch (_) {}
 
@@ -4020,22 +4148,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           if (zipLabel) zipLabel.textContent = `Packing ${packed}/${toDownload.length}`;
         }
 
-        if (packed === 0) throw new Error('No images could be packed');
+        if (packed === 0) throw new Error('No files could be packed');
 
         status.textContent = 'Generating ZIP archive...';
         if (zipLabel) zipLabel.textContent = '⚡ Building ZIP...';
-        const zipContent = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 3 } });
+        const zipContent = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 2 } });
         const objUrl = URL.createObjectURL(zipContent);
         const a = document.createElement('a');
         a.href = objUrl;
-        a.download = `${productSlug}-images.zip`;
+        a.download = `${productSlug}-${isImg ? 'images' : 'videos'}.zip`;
         document.body.appendChild(a);
         a.click();
         a.remove();
         setTimeout(() => URL.revokeObjectURL(objUrl), 2500);
 
         status.className = 'status-bar ok';
-        status.textContent = `\u2713 ZIP downloaded: ${packed} images!`;
+        status.textContent = `\u2713 ZIP downloaded: ${packed} ${isImg ? 'images' : 'videos'}!`;
         if (zipLabel) zipLabel.textContent = '✓ Downloaded!';
       } catch (err) {
         status.className = 'status-bar err';
@@ -4053,24 +4181,29 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     // ── Download as Individual Files
     dlBtn.addEventListener('click', async () => {
-      if (!selected.size) return;
+      const isImg = activeTab === 'images';
+      const targetSet = isImg ? selected : selectedVideos;
+      if (!targetSet.size) return;
       dlBtn.disabled = true;
       dlBtn.classList.add('busy');
       if (zipBtn) zipBtn.disabled = true;
       const dlLabel = shadow.getElementById('zh-dl-label');
-      const toDownload = [...selected].sort();
+      const toDownload = [...targetSet].sort();
       let done = 0;
 
       status.className = 'status-bar';
       status.textContent = `Downloading 0 / ${toDownload.length}...`;
       if (dlLabel) dlLabel.textContent = `0/${toDownload.length}`;
 
-      const productSlug = document.title.replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 30);
+      const productSlug = (document.title || 'product').replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 30);
 
       for (const idx of toDownload) {
-        const url = images[idx];
-        const ext = url.match(/\.(jpe?g|png|webp|gif)/i)?.[1] || 'jpg';
-        const filename = `${productSlug}-img${idx + 1}.${ext}`;
+        const url = isImg ? images[idx] : videos[idx];
+        const ext = isImg
+          ? (url.match(/\.(jpe?g|png|webp|gif)/i)?.[1] || 'jpg')
+          : (url.includes('.m3u8') ? 'mp4' : url.match(/\.(mp4|webm|m4v|mov)/i)?.[1] || 'mp4');
+        const prefix = isImg ? 'img' : 'video';
+        const filename = `${productSlug}-${prefix}${idx + 1}.${ext}`;
         try {
           downloadViaBackground(url, filename);
           done++;
@@ -4081,7 +4214,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
 
       status.className = 'status-bar ok';
-      status.textContent = `\u2713 ${done} image${done !== 1 ? 's' : ''} downloaded!`;
+      status.textContent = `\u2713 ${done} ${isImg ? 'image' : 'video'}${done !== 1 ? 's' : ''} downloaded!`;
       if (dlLabel) dlLabel.textContent = '✓ Done!';
       setTimeout(() => {
         updateDlBtn();
@@ -4090,24 +4223,36 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }, 3000);
     });
 
-    // ── Load images (with delay for SPAs)
+    // ── Load images & videos (with delay for SPAs)
     let knownImages = new Set();
     let refreshTimer = null;
     const refreshImages = () => {
-      const next = collectPageImages();
-      if (!next.length && images.length) return;
-      const selectedUrls = new Set([...selected].map(index => images[index]).filter(Boolean));
-      const previousUrls = new Set(images);
-      images = next;
-      selected = new Set(images.map((url, index) => {
-        if (!previousUrls.size || selectedUrls.has(url) || !previousUrls.has(url)) return index;
-        return -1;
-      }).filter(index => index >= 0));
-      const changed = images.length !== knownImages.size || images.some(url => !knownImages.has(url));
-      if (changed || !knownImages.size) {
-        knownImages = new Set(images);
-        renderGrid();
+      const nextImgs = collectPageImages();
+      const nextVids = collectPageVideos();
+
+      videos = nextVids;
+      if (vidCountEl) vidCountEl.textContent = videos.length;
+      if (!selectedVideos.size) {
+        videos.forEach((_, idx) => selectedVideos.add(idx));
       }
+
+      if (nextImgs.length || !images.length) {
+        const selectedUrls = new Set([...selected].map(index => images[index]).filter(Boolean));
+        const previousUrls = new Set(images);
+        images = nextImgs;
+        selected = new Set(images.map((url, index) => {
+          if (!previousUrls.size || selectedUrls.has(url) || !previousUrls.has(url)) return index;
+          return -1;
+        }).filter(index => index >= 0));
+
+        const changed = images.length !== knownImages.size || images.some(url => !knownImages.has(url));
+        if (changed || !knownImages.size) {
+          knownImages = new Set(images);
+          if (activeTab === 'images') renderGrid();
+          else renderVideoGrid();
+        }
+      }
+      if (activeTab === 'videos') renderVideoGrid();
     };
     const scheduleRefresh = () => {
       clearTimeout(refreshTimer);

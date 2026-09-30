@@ -2455,6 +2455,17 @@ async function downloadCardImages(btn, urls, safeName) {
     }
 
     if (!downloaded) {
+      try {
+        await new Promise(res => {
+          chrome.downloads.download({ url: urls[i], filename, saveAs: false, conflictAction: 'uniquify' }, id => {
+            if (id && !chrome.runtime.lastError) downloaded = true;
+            res();
+          });
+        });
+      } catch (_) {}
+    }
+
+    if (!downloaded) {
       const a = document.createElement('a');
       a.href = urls[i];
       a.download = filename;
@@ -2601,17 +2612,23 @@ function stopSaveAll() {
 }
 async function downloadOne(src, name) {
   return new Promise((resolve) => {
-    try {
-      const a = document.createElement('a');
-      a.href = src;
-      a.download = name;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => { a.remove(); resolve(true); }, 50);
-    } catch (e) {
-      resolve(false);
-    }
+    chrome.downloads.download({ url: src, filename: name, saveAs: false, conflictAction: 'uniquify' }, id => {
+      if (chrome.runtime.lastError || !id) {
+        try {
+          const a = document.createElement('a');
+          a.href = src;
+          a.download = name;
+          a.style.display = 'none';
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => { a.remove(); resolve(true); }, 50);
+        } catch (_) {
+          resolve(false);
+        }
+      } else {
+        resolve(true);
+      }
+    });
   });
 }
 async function startSaveAll() {
@@ -6984,13 +7001,13 @@ const results = await chrome.scripting.executeScript({
 
           // Dedup by Amazon image ID + reject obvious thumbnails
           const seenIds = new Set();
-          const addImg = (url, keepBare) => {
+          const addImg = (url) => {
             if (!url || !url.startsWith('http')) return;
             // Reject thumbnail-sized Amazon URLs (small token = tiny image)
             // e.g. ._AC_SR38,50_. (38x50px) or ._SX48_. (48px) etc.
             if (/\._[A-Z]{2,}_S[RXY]\d{1,3}[,_]/i.test(url)) return;
             if (/\._S[XY]\d{1,3}_\./i.test(url)) return; // _SX48_, _SY60_ etc.
-            const final = keepBare ? amzStrip(url) || url : url;
+            const final = amzUpgrade(url) || url;
             const m = final.match(/\/images\/I\/([A-Za-z0-9+/]+=*)/);
             const id = m ? m[1] : final;
             if (seenIds.has(id)) return;
@@ -6998,10 +7015,7 @@ const results = await chrome.scripting.executeScript({
             images.push(final);
           };
 
-          // Upgrade a 'large' URL to ._AC_SL1500_. (reliable 500-1500px CDN version)
-          // NOTE: 'large' image IDs are stored as 500px source files.
-          // Stripping their token gives the same 500px. But ._AC_SL1500_. asks Amazon
-          // for the best it can serve up to 1500px, which is more reliable.
+          // Upgrade to ._AC_SL1500_. (Amazon auto-crop HD 1500px CDN version)
           const amzUpgrade = (url) => {
             if (!url) return url;
             const bare = amzStrip(url);
@@ -7020,7 +7034,7 @@ const results = await chrome.scripting.executeScript({
                 let match;
                 let hiResCount = 0;
                 while ((match = hiResRegex.exec(t)) !== null) {
-                  addImg(match[1], false); // As requested, use exact hiRes URL
+                  addImg(amzUpgrade(match[1]));
                   hiResCount++;
                 }
                 
@@ -7032,7 +7046,7 @@ const results = await chrome.scripting.executeScript({
                 // If no hiRes, fallback to large
                 let largeCount = 0;
                 while ((match = largeRegex.exec(t)) !== null) {
-                  addImg(amzUpgrade(match[1]), false);
+                  addImg(amzUpgrade(match[1]));
                   largeCount++;
                 }
                 
@@ -7051,17 +7065,16 @@ const results = await chrome.scripting.executeScript({
             const landingImage = document.getElementById('landingImage');
             if (landingImage) {
               const dataOldHires = landingImage.getAttribute('data-old-hires');
-              if (dataOldHires) addImg(dataOldHires, false);
-              else addImg(landingImage.src, false);
+              if (dataOldHires) addImg(amzUpgrade(dataOldHires));
+              else addImg(amzUpgrade(landingImage.src));
             }
             
             // Also look for alternate image thumbnails to extract their hi-res versions
             const altImages = document.querySelectorAll('.a-button-thumbnail img, .imageThumbnail img');
             altImages.forEach(img => {
               let src = img.src || '';
-              // Simple extension strips size tokens to get original
-              let hiResSrc = src.replace(/\._.*_\./, '.');
-              if (hiResSrc) addImg(hiResSrc, false);
+              let hiResSrc = amzUpgrade(src);
+              if (hiResSrc) addImg(hiResSrc);
             });
           }
 

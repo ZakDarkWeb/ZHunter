@@ -1011,7 +1011,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 const CONTENT_SCRIPT_ACTIONS = new Set([
   'DOWNLOAD_PAGE_IMAGES', 'FETCH_BASE64',
   'FETCH_BASE64_BATCH', 'GET_PENDING_IMAGE_HUNT', 'CHECK_BULK_QUEUE',
-  'ADD_TO_BULK_QUEUE'
+  'ADD_TO_BULK_QUEUE', 'DOWNLOAD_FILE'
 ]);
 
 function isAuthorizedMessage(msg, sender) {
@@ -1060,7 +1060,7 @@ async function handleMessage(msg, sender) {
       return { success: true, results: results || [] };
     }
     case 'DOWNLOAD_PAGE_IMAGES': {
-      const urls = Array.isArray(msg.urls) ? [...new Set(msg.urls.filter(isValidURL))].slice(0, 7) : [];
+      const urls = Array.isArray(msg.urls) ? [...new Set(msg.urls.filter(isValidURL))].slice(0, 100) : [];
       const rawName = sanitizeText(msg.title || 'product-images').replace(/[<>:"/\\|?*]+/g, '_').trim().slice(0, 70) || 'product-images';
 
       const downloadResults = await Promise.all(urls.map(async (url, index) => {
@@ -1110,8 +1110,20 @@ async function handleMessage(msg, sender) {
       const started = downloadResults.filter(r => r?.success).length;
       const failed  = downloadResults.filter(r => !r?.success).length;
       return { success: started > 0, requested: urls.length, started, failed,
-        errors: downloadResults.filter(r => !r?.success).map(r => r.error).slice(0, 7),
-        failedUrls: downloadResults.filter(r => !r?.success).map(r => r.url).filter(Boolean).slice(0, 7) };
+        errors: downloadResults.filter(r => !r?.success).map(r => r.error).slice(0, 50),
+        failedUrls: downloadResults.filter(r => !r?.success).map(r => r.url).filter(Boolean).slice(0, 50) };
+    }
+
+    case 'DOWNLOAD_FILE': {
+      const { url, filename } = msg;
+      if (!url || typeof url !== 'string') return { success: false, error: 'no_url' };
+      const safeFilename = (filename || 'download').replace(/[<>:"/\\|?*]+/g, '_').trim();
+      return new Promise(resolve => {
+        chrome.downloads.download({ url, filename: safeFilename, saveAs: false, conflictAction: 'uniquify' }, downloadId => {
+          const error = chrome.runtime.lastError?.message || '';
+          resolve(error || !downloadId ? { success: false, error: error || 'download_failed' } : { success: true, downloadId });
+        });
+      });
     }
 
     case 'GET_PENDING_IMAGE_HUNT': {
